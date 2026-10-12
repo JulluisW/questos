@@ -1,6 +1,7 @@
 'use client';
 
-import { AuthForm } from '@/components/AuthForm';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { TavernBoard } from '@/components/TavernBoard';
 import { QuestProvider } from '@/context/QuestContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -8,9 +9,13 @@ import { useAuth } from '@/hooks/useAuth';
 export default function Home() {
   const user = useAuth();
 
-  if (!user) {
-    return <AuthForm />;
-  }
+  // const router = useRouter();
+
+  // useEffect(() => {
+  //   if (!user) {
+  //     router.push('/login-1');
+  //   }
+  // }, [user, router]);
 
   return (
     <QuestProvider>

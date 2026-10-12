@@ -11,7 +11,7 @@ export function useAuth() {
       setUser(data.session?.user ?? null);
     };
 
-    void initSession();
+    initSession();
 
     const {
       data: { subscription },
