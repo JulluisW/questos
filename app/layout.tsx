@@ -17,8 +17,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'QuestOS - Command Center',
-  description: 'Turn goals into legends.',
+  title: 'Operation Berk | Quest Board',
+  description: 'A parchment-and-wood campaign board for turning goals into legends.',
 };
 
 export default function RootLayout({
