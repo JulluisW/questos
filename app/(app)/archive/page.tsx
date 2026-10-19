@@ -1,18 +1,9 @@
 'use client';
 
-import { QuestItem } from '@/components/QuestItem';
-import { useQuests } from '@/hooks/useQuests';
-import { supabase } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { useEffect } from 'react';
 
 export default function Archive() {
-  const { archivedQuests } = useQuests();
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  };
-
   useEffect(() => {}, []);
   return (
     <div className="font-body text-ink flex min-h-full flex-1 items-center justify-center p-5">
@@ -29,7 +20,6 @@ export default function Archive() {
           </Link>
           <button
             type="button"
-            onClick={() => void handleSignOut()}
             className="font-body text-ink/50 hover:text-ink/80 absolute top-0 right-0 cursor-pointer text-xs underline-offset-2 transition-colors hover:underline"
           >
             Sign Out
@@ -37,11 +27,7 @@ export default function Archive() {
           <h1 className="font-heading text-ink text-[2.5rem] tracking-[3px] uppercase">The Valhalla</h1>
           <p className="subtitle font-body mt-2 text-[#4b3d39] italic">Official Hall of Records</p>
         </header>
-        <div className="flex flex-col gap-2">
-          {archivedQuests.map((quest) => (
-            <QuestItem quest={quest} key={quest.id} />
-          ))}
-        </div>
+        <div className="flex flex-col gap-2"></div>
       </main>
     </div>
   );

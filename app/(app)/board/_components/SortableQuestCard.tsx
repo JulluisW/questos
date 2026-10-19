@@ -33,7 +33,7 @@ export function SortableQuestCard({ quest, onDelete }: SortableQuestCardProps) {
           e.stopPropagation();
           handleDeleteQuest(quest.id);
         }}
-        className="btn-delete mt-2 cursor-pointer rounded border border-transparent bg-transparent px-1.5 py-0.5 font-heading text-[0.75rem] text-accent-career/50 transition-all duration-200 hover:border-accent-career hover:bg-accent-career/10 hover:text-accent-career"
+        className="btn-delete font-heading text-accent-career/50 hover:border-accent-career hover:bg-accent-career/10 hover:text-accent-career mt-2 cursor-pointer rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[0.75rem] transition-all duration-200"
       >
         Abandon
       </button>
@@ -41,7 +41,7 @@ export function SortableQuestCard({ quest, onDelete }: SortableQuestCardProps) {
       {quest.status === 'completed' && (
         <button
           onClick={() => archiveQuest(quest.id)}
-          className="px-3 py-1 text-sm bg-yellow-600 hover:bg-yellow-700 text-white rounded transition-colors"
+          className="rounded bg-yellow-600 px-3 py-1 text-sm text-white transition-colors hover:bg-yellow-700"
         >
           Archive to Hall of Records
         </button>

@@ -4,7 +4,7 @@ export type Quest = {
   id: string;
   text: string;
   campaign: string;
-  isMilestone: boolean;
+  is_milestone: boolean;
   status: QuestStatus;
-  archivedAt: string | null;
+  archived_at: string | null;
 };
