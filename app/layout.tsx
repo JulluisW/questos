@@ -17,8 +17,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'QuestOS - Command Center',
-  description: 'Turn goals into legends.',
+  title: 'Operation Berk | Quest Board',
+  description: 'A parchment-and-wood campaign board for turning goals into legends.',
 };
 
 export default function RootLayout({
@@ -28,7 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={cn('h-full antialiased', lora.variable, inter.variable)}>
-      <body className="min-h-full flex flex-col font-sans bg-[#141414] text-[#f7efd2]">{children}</body>
+      <body className="flex min-h-full flex-col bg-[#141414] font-sans text-[#f7efd2]">{children}</body>
     </html>
   );
 }

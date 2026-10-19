@@ -1,3 +1,5 @@
+import { TavernBoard } from '@/components/TavernBoard';
+
 export default function Home() {
-  return <div>main page</div>;
+  return <TavernBoard />;
 }
