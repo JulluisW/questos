@@ -53,6 +53,35 @@ export function QuestBoard({ initialQuests }: QuestBoardProps) {
     [quests]
   );
 
+  const renderQuestCard = (quest: Quest) => {
+    const isCompleted = quest.status === 'completed';
+    return (
+      <ScrollCard
+        key={quest.id}
+        id={quest.id}
+        title={quest.title}
+        badge={{
+          label: quest.is_milestone ? 'MILESTONE' : 'QUEST',
+          color: quest.is_milestone
+            ? 'bg-[#e8b5b5] text-[#8a3333] border border-[#d88888]'
+            : 'bg-[#e8d2ac] text-[#8c6020] border border-[#d8bc88]',
+        }}
+        meta={[quest.campaign_id]} // (Optional: you might want to hide raw UUIDs in the UI later)
+        assignee="Unassigned"
+        xp={quest.is_milestone ? '+100 XP' : '+40 XP'}
+        completed={isCompleted}
+        waxSeal={isCompleted}
+        symbol={
+          quest.is_milestone ? (
+            <Award className="h-4 w-4 text-amber-800" />
+          ) : (
+            <Feather className="h-4 w-4 text-amber-800" />
+          )
+        }
+      />
+    );
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
@@ -60,7 +89,6 @@ export function QuestBoard({ initialQuests }: QuestBoardProps) {
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    console.log('draageed');
     setActiveId(event.active.id as string);
   }, []);
 
@@ -113,7 +141,7 @@ export function QuestBoard({ initialQuests }: QuestBoardProps) {
 
           return (
             <BoardColumn
-              quests={quests}
+              quests={columnQuests}
               status={colId}
               key={colId}
               title={COLUMN_LABELS[colId]}
@@ -121,34 +149,7 @@ export function QuestBoard({ initialQuests }: QuestBoardProps) {
               bannerColor={style.color}
               bannerIcon={style.icon}
             >
-              {columnQuests.map((quest: Quest) => {
-                const isCompleted = quest.status === 'completed';
-                return (
-                  <ScrollCard
-                    key={quest.id}
-                    id={quest.id}
-                    title={quest.text}
-                    badge={{
-                      label: quest.is_milestone ? 'MILESTONE' : 'QUEST',
-                      color: quest.is_milestone
-                        ? 'bg-[#e8b5b5] text-[#8a3333] border border-[#d88888]' // Red for milestone
-                        : 'bg-[#e8d2ac] text-[#8c6020] border border-[#d8bc88]', // Gold for quest
-                    }}
-                    meta={[quest.campaign]} // DB: "General Campaign"
-                    assignee="Unassigned" // Placeholder until DB has an assignee_id
-                    xp={quest.is_milestone ? '+100 XP' : '+40 XP'} // Adjust based on your constants
-                    completed={isCompleted}
-                    waxSeal={isCompleted}
-                    symbol={
-                      quest.is_milestone ? (
-                        <Award className="h-4 w-4 text-amber-800" />
-                      ) : (
-                        <Feather className="h-4 w-4 text-amber-800" />
-                      )
-                    }
-                  />
-                );
-              })}
+              {columnQuests.map(renderQuestCard)}
             </BoardColumn>
           );
         })}
@@ -156,29 +157,7 @@ export function QuestBoard({ initialQuests }: QuestBoardProps) {
         <DragOverlay>
           {activeQuest ? (
             <div className="rotate-1 cursor-grabbing shadow-[0_12px_24px_rgba(0,0,0,0.45)] brightness-95">
-              <ScrollCard
-                key={activeQuest.id}
-                id={activeQuest.id}
-                title={activeQuest.text}
-                badge={{
-                  label: activeQuest.is_milestone ? 'MILESTONE' : 'QUEST',
-                  color: activeQuest.is_milestone
-                    ? 'bg-[#e8b5b5] text-[#8a3333] border border-[#d88888]' // Red for milestone
-                    : 'bg-[#e8d2ac] text-[#8c6020] border border-[#d8bc88]', // Gold for quest
-                }}
-                meta={[activeQuest.campaign]} // DB: "General Campaign"
-                assignee="Unassigned" // Placeholder until DB has an assignee_id
-                xp={activeQuest.is_milestone ? '+100 XP' : '+40 XP'} // Adjust based on your constants
-                completed={activeQuest.status === 'completed'}
-                waxSeal={activeQuest.status === 'completed'}
-                symbol={
-                  activeQuest.is_milestone ? (
-                    <Award className="h-4 w-4 text-amber-800" />
-                  ) : (
-                    <Feather className="h-4 w-4 text-amber-800" />
-                  )
-                }
-              />
+              {renderQuestCard(activeQuest)}
             </div>
           ) : null}
         </DragOverlay>

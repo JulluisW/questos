@@ -1,14 +1,33 @@
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { QuestBoard } from './_components/quest-board';
 
-export default async function QuestBoardPage() {
+import { QuestBoard } from '../_components/quest-board';
+
+type QuestBoardPageProps = {
+  params: Promise<{ campaignId: string }>;
+};
+
+export default async function QuestBoardPage({ params }: QuestBoardPageProps) {
+  const { campaignId } = await params;
   const supabase = await createClient();
 
-  const { data } = await supabase.from('quests').select('*');
+  const { data: campaign, error } = await supabase
+    .from('campaigns')
+    .select(
+      `
+      *,
+      quests (*)
+    `
+    )
+    .eq('id', campaignId)
+    .limit(1)
+    .single();
 
-  const { data: campaign } = await supabase.from('campaigns').select('*');
+  if (error || !campaign) {
+    redirect('/board');
+  }
 
-  console.log(campaign);
+  const quests = campaign.quests || [];
 
   return (
     <div className="flex h-full flex-col p-4">
@@ -46,7 +65,7 @@ export default async function QuestBoardPage() {
           </button>
         </div>
       </div>
-      <QuestBoard initialQuests={data || []} />
+      <QuestBoard initialQuests={quests || []} />
     </div>
   );
 }

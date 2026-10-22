@@ -7,24 +7,30 @@ export async function createQuestAction(formData: FormData) {
   try {
     const supabase = await createClient();
 
-    const text = formData.get('text') as string;
-    const campaign = formData.get('campaign') as string;
+    const title = formData.get('title') as string;
+    const description = formData.get('description') as string;
+    const campaign_id = formData.get('campaign_id') as string;
     const is_milestone = formData.get('is_milestone') === 'on';
 
+    if (!title || !campaign_id) {
+      return { error: 'Quest title and campaign ID are required.' };
+    }
+
     const newQuest = {
-      text,
-      campaign: campaign || 'General Campaign',
-      status: 'pending' as const,
+      title,
+      description: description || null,
+      campaign_id,
+      status: 'pending' as QuestStatus,
       is_milestone,
+      xp_reward: is_milestone ? 250 : 50,
     };
 
-    // Insert and immediately return the created row (.select().single())
     const { data, error } = await supabase.from('quests').insert([newQuest]).select().single();
 
-    if (error) return { error: 'Failed to forge new quest in the registry.' };
+    if (error) return { error: error.message };
 
     return { success: true, quest: data };
-  } catch (err) {
+  } catch {
     return { error: 'Failed to reach the server.' };
   }
 }

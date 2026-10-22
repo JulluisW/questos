@@ -1,8 +1,6 @@
-'use server';
-
 import { Swords } from 'lucide-react';
-import { AuthForm } from './components/auth-form';
-import { SignUpForm } from './components/signup-form';
+import { AuthForm } from './_components/auth-form';
+import { SignUpForm } from './_components/signup-form';
 
 interface CornerDecorationProps {
   className?: string;

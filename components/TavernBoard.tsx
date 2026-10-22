@@ -134,8 +134,8 @@ export function TavernBoard() {
           </div>
         )}
 
-        <section aria-label="Quest board" className="overflow-x-auto pb-5">
-          <div className="grid min-w-275 grid-cols-3 gap-5 xl:gap-7">
+        <section aria-label="Quest board" className="overflow-x-auto">
+          <div className="grid w-full grid-cols-3 gap-5 bg-red-100 xl:gap-7">
             {quests.map((column) => {
               const Icon = column.icon;
               return (

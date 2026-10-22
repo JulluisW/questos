@@ -1,24 +1,19 @@
 // app/(dashboard)/layout.tsx
 import React from 'react';
 import Link from 'next/link';
-import {
-  LayoutDashboard,
-  Kanban,
-  Flag,
-  FileText,
-  Users,
-  BarChart3,
-  Trophy,
-  Search,
-  Sparkles,
-  Plus,
-} from 'lucide-react';
+import { LayoutDashboard, Kanban, Flag, FileText, Users, BarChart3, Trophy, Search, Sparkles } from 'lucide-react';
+import { createClient } from '@/lib/supabase/server';
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createClient();
+  const { data } = await supabase.from('profiles').select('*');
+
+  console.log('data', data);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#1c120c] p-0 font-sans text-neutral-100 antialiased md:p-3">
       {/* Outer RPG Bezel / Window Frame */}
-      <div className="relative flex max-h-[95vh] min-h-[820px] w-full max-w-7xl overflow-hidden rounded-lg border-4 border-[#332219] bg-[#170e0a] shadow-2xl">
+      <div className="relative flex max-h-[95vh] min-h-205 w-full max-w-360 overflow-hidden rounded-lg border-4 border-[#332219] bg-[#170e0a] shadow-2xl">
         {/* =========================================================================
             SIDEBAR NAVIGATION (Server Rendered)
             ========================================================================= */}
@@ -50,12 +45,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* User Profile Footer Card */}
           <div className="flex items-center gap-3 border-t border-amber-900/30 px-2 pt-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-tr from-amber-700 to-amber-500 font-serif text-xs font-bold text-stone-950 shadow">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-linear-to-tr from-amber-700 to-amber-500 font-serif text-xs font-bold text-stone-950 shadow">
               SL
             </div>
             <div className="overflow-hidden">
               <div className="flex items-center gap-1.5">
-                <span className="truncate font-serif text-xs font-bold text-amber-100">Sahbana</span>
+                <span className="truncate font-serif text-xs font-bold text-amber-100">SSB</span>
                 <span className="rounded border border-amber-800/50 bg-amber-950/80 px-1 text-[9px] text-amber-400">
                   Level 12
                 </span>
@@ -70,13 +65,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             ========================================================================= */}
         <main className="bg-parchment relative flex flex-1 flex-col overflow-y-auto text-[#1c120c]">
           {/* Subtle Paper-Grain Background Texture Overlay */}
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#1c120c_1px,_transparent_1px)] [background-size:16px_16px] opacity-[0.025] mix-blend-multiply" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#1c120c_1px,transparent_1px)] bg-size-[16px_16px] opacity-[0.025] mix-blend-multiply" />
 
           {/* Top Header / Action Bar (Server Rendered Shell) */}
-          <header className="sticky top-0 z-10 flex items-center justify-between border-b border-[#ebdcca] bg-[#fbf8f3]/90 px-8 py-5 backdrop-blur-md">
+          <header className="bg-parchment border-wood sticky top-0 z-10 flex items-center justify-between border-b px-8 py-4 backdrop-blur-md">
             <div className="font-sans text-xs tracking-wide text-stone-500">
-              Workspace <span className="mx-1.5 text-stone-300">/</span>{' '}
-              <span className="font-medium text-stone-800">Command Center</span>
+              Board <span className="mx-1.5 text-stone-300">/</span>{' '}
+              <span className="font-medium text-stone-800">Product Launch Campaign</span>
             </div>
 
             <div className="flex items-center gap-3">
@@ -91,10 +86,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 className="flex h-9 w-9 items-center justify-center rounded border border-[#d8ccbc] text-stone-600 transition-colors hover:bg-[#f2ebdf]"
               >
                 <Sparkles className="h-4 w-4 text-amber-700" />
-              </button>
-              <button className="flex items-center gap-2 rounded border border-[#52372a] bg-[#3d271d] px-4 py-2 text-xs font-bold tracking-wider text-[#fbf8f3] uppercase shadow transition-all hover:bg-[#2b1b14]">
-                <Plus className="h-3.5 w-3.5" />
-                New Quest
               </button>
             </div>
           </header>

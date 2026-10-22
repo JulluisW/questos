@@ -17,8 +17,7 @@ export async function loginWithEmail(formData: FormData) {
   });
 
   if (error) {
-    console.log(error);
-    throw new Error(error.message);
+    return { error: error.message };
   }
 
   redirect('/board');
@@ -46,9 +45,8 @@ export async function signUpWithEmail(formData: FormData) {
   });
 
   if (error) {
-    console.log(error);
-    throw new Error(error.message);
+    return { error: error.message };
   }
 
-  redirect('/login');
+  redirect('/login?message=Verification email sent.');
 }
