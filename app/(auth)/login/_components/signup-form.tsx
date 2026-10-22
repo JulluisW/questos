@@ -1,4 +1,6 @@
-// app/(auth)/login-1/_components/auth-form.tsx
+'use client';
+
+import { useActionState } from 'react';
 import Link from 'next/link';
 import { signUpWithEmail } from '@/actions/auth';
 import { SubmitButton } from './submit-button';
@@ -9,6 +11,8 @@ interface AuthFormProps {
 }
 
 export function SignUpForm({ errorMessage }: AuthFormProps) {
+  const [signUpState, signUpAction, signUpIsPending] = useActionState(signUpWithEmail, null);
+
   return (
     <div className="bg-parchment relative flex w-full flex-col justify-center p-8 font-sans text-[#1c120c] md:w-1/2 md:p-12 lg:p-16">
       {/* Subtle Paper-Grain Background Overlay */}
@@ -36,7 +40,12 @@ export function SignUpForm({ errorMessage }: AuthFormProps) {
         )}
 
         {/* Form Native Server Action */}
-        <form action={signUpWithEmail} className="space-y-4">
+        <form action={signUpAction} className="space-y-4">
+          {signUpState?.error && (
+            <div className="rounded border border-red-800/40 bg-red-950/40 p-3 font-sans text-xs text-red-400">
+              {signUpState.error}
+            </div>
+          )}
           <div>
             <label
               htmlFor="username"

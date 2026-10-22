@@ -3,7 +3,11 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 
-export async function loginWithEmail(formData: FormData) {
+export type AuthState = {
+  error?: string;
+};
+
+export async function loginWithEmail(_prevState: AuthState | null, formData: FormData): Promise<AuthState> {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
 
@@ -23,7 +27,7 @@ export async function loginWithEmail(formData: FormData) {
   redirect('/board');
 }
 
-export async function signUpWithEmail(formData: FormData) {
+export async function signUpWithEmail(_prevState: AuthState | null, formData: FormData): Promise<AuthState> {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
   const username = formData.get('username') as string;

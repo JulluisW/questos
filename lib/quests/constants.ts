@@ -12,30 +12,3 @@ export const COLUMN_LABELS: Record<QuestStatus, string> = {
   'in-progress': 'In Progress',
   completed: 'Completed',
 };
-
-export const defaultQuests: Quest[] = [
-  {
-    id: 'c1',
-    text: 'Complete 2 algorithms on LeetCode',
-    campaign: 'Main Quest',
-    is_milestone: false,
-    status: 'pending',
-    archived_at: null,
-  },
-  {
-    id: 'c2',
-    text: 'Read 1 chapter of system design',
-    campaign: 'Main Quest',
-    is_milestone: false,
-    status: 'pending',
-    archived_at: null,
-  },
-  {
-    id: 'f1',
-    text: 'Lift heavy objects for 45 minutes',
-    campaign: 'Marathon Prep',
-    is_milestone: true,
-    status: 'pending',
-    archived_at: null,
-  },
-];
