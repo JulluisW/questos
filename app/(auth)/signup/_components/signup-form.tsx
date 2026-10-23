@@ -2,33 +2,31 @@
 
 import { useActionState } from 'react';
 import Link from 'next/link';
+import { Swords } from 'lucide-react';
 import { signUpWithEmail } from '@/actions/auth';
-import { SubmitButton } from './submit-button';
+import { SubmitButton } from '../../_components/submit-button';
 // import { loginWithGoogle, loginWithMicrosoft } from '@/actions/auth-oauth';
 
-interface AuthFormProps {
+interface SignUpFormProps {
   errorMessage?: string;
 }
 
-export function SignUpForm({ errorMessage }: AuthFormProps) {
-  const [signUpState, signUpAction, signUpIsPending] = useActionState(signUpWithEmail, null);
+export function SignUpForm({ errorMessage }: SignUpFormProps) {
+  const [signUpState, signUpAction] = useActionState(signUpWithEmail, null);
 
   return (
     <div className="bg-parchment relative flex w-full flex-col justify-center p-8 font-sans text-[#1c120c] md:w-1/2 md:p-12 lg:p-16">
-      {/* Subtle Paper-Grain Background Overlay */}
       <div className="bg-parchment pointer-events-none absolute inset-0 opacity-[0.03] mix-blend-multiply" />
 
       <div className="relative z-10 mx-auto w-full max-w-md">
         {/* Greeting Header */}
         <div className="mb-8">
           <span className="mb-1 block font-serif text-xs font-semibold tracking-wider text-amber-800 uppercase">
-            Tavern Gate
+            Member Registry
           </span>
-          <h3 className="font-serif text-2xl leading-tight font-bold text-[#1a0f0a] md:text-3xl">
-            Welcome back, Architect
-          </h3>
+          <h3 className="font-serif text-2xl leading-tight font-bold text-[#1a0f0a] md:text-3xl">Enlist in QuestOS</h3>
           <p className="mt-2 font-sans text-sm font-normal text-stone-600">
-            Masuk untuk melanjutkan campaign dan melihat progress tim.
+            Create your account to forge a new guild or join an existing party.
           </p>
         </div>
 
@@ -40,12 +38,29 @@ export function SignUpForm({ errorMessage }: AuthFormProps) {
         )}
 
         {/* Form Native Server Action */}
-        <form action={signUpAction} className="space-y-4">
+        <form action={signUpAction} className="space-y-4" autoComplete="off">
           {signUpState?.error && (
             <div className="rounded border border-red-800/40 bg-red-950/40 p-3 font-sans text-xs text-red-400">
               {signUpState.error}
             </div>
           )}
+          <div>
+            <label
+              htmlFor="full_name"
+              className="mb-1.5 block font-sans text-[10px] font-bold tracking-widest text-[#403026] uppercase"
+            >
+              Full Name
+            </label>
+            <input
+              autoComplete="off"
+              id="full_name"
+              name="full_name"
+              type="text"
+              required
+              placeholder="fullName"
+              className="focus:ring-wood w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:outline-none"
+            />
+          </div>
           <div>
             <label
               htmlFor="username"
@@ -54,12 +69,13 @@ export function SignUpForm({ errorMessage }: AuthFormProps) {
               Username
             </label>
             <input
+              autoComplete="off"
               id="username"
               name="username"
               type="text"
               required
-              placeholder="username"
-              className="w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:ring-[#5c4033] focus:outline-none"
+              placeholder="Enter username"
+              className="focus:ring-wood w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:outline-none"
             />
           </div>
           <div>
@@ -70,12 +86,13 @@ export function SignUpForm({ errorMessage }: AuthFormProps) {
               Email Address
             </label>
             <input
+              autoComplete="off"
               id="email"
               name="email"
               type="email"
               required
               placeholder="you@company.com"
-              className="w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:ring-[#5c4033] focus:outline-none"
+              className="focus:ring-wood w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:outline-none"
             />
           </div>
 
@@ -87,39 +104,56 @@ export function SignUpForm({ errorMessage }: AuthFormProps) {
               >
                 Password
               </label>
-              <Link
-                href="/forgot-password"
-                className="font-serif text-xs text-amber-800 underline transition-colors hover:text-amber-950"
-              >
-                Forgot?
-              </Link>
             </div>
             <input
+              autoComplete="new-password"
               id="password"
               name="password"
               type="password"
               required
               placeholder="••••••••"
-              className="w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:ring-[#5c4033] focus:outline-none"
+              className="focus:ring-wood w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label
+                htmlFor="confirmPassword"
+                className="block font-sans text-[10px] font-bold tracking-widest text-[#403026] uppercase"
+              >
+                Confirm Password
+              </label>
+            </div>
+            <input
+              id="confirmPassword"
+              name="confirmPassword"
+              type="password"
+              required
+              placeholder="••••••••"
+              className="focus:ring-wood w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:outline-none"
             />
           </div>
 
           {/* Extracted Client Component for Loading UI */}
-          <SubmitButton />
+          <SubmitButton>
+            CREATE YOUR ACCOUNT
+            <Swords className="h-4 w-4" />
+          </SubmitButton>
         </form>
 
-        <div className="relative my-6 flex items-center justify-center">
+        {/* <div className="relative my-6 flex items-center justify-center">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-[#d3c8ba]/60" />
           </div>
           <span className="relative bg-[#fbf8f3] px-3 font-sans text-[10px] tracking-wider text-stone-400 uppercase">
             atau lanjutkan dengan
           </span>
-        </div>
+        </div> */}
 
         {/* OAuth Buttons (Wrapped in their own forms for Server Actions) */}
-        <div className="grid grid-cols-2 gap-3">
-          <form action={/* loginWithGoogle */ undefined} className="w-full">
+        {/* <div className="grid grid-cols-2 gap-3">
+          <form action={undefined} className="w-full">
             <button
               type="submit"
               className="flex w-full items-center justify-center gap-2 rounded border border-[#d3c8ba] bg-[#f5f1ea] px-4 py-2.5 font-sans text-xs font-semibold text-[#403026] transition-all hover:bg-[#ebe5d9]"
@@ -146,7 +180,7 @@ export function SignUpForm({ errorMessage }: AuthFormProps) {
             </button>
           </form>
 
-          <form action={/* loginWithMicrosoft */ undefined} className="w-full">
+          <form action={undefined} className="w-full">
             <button
               type="submit"
               className="flex w-full items-center justify-center gap-2 rounded border border-[#d3c8ba] bg-[#f5f1ea] px-4 py-2.5 font-sans text-xs font-semibold text-[#403026] transition-all hover:bg-[#ebe5d9]"
@@ -160,15 +194,15 @@ export function SignUpForm({ errorMessage }: AuthFormProps) {
               Microsoft
             </button>
           </form>
-        </div>
+        </div> */}
 
         <p className="mt-8 text-center font-sans text-xs text-stone-500">
-          Belum punya akun?{' '}
+          Already registered at the Tavern?{' '}
           <Link
-            href="/register"
+            href="/login"
             className="font-serif font-bold text-amber-800 underline transition-colors hover:text-amber-950"
           >
-            Create your guild
+            Sign in to your realm
           </Link>
         </p>
       </div>

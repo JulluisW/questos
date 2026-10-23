@@ -2,14 +2,8 @@
 import React from 'react';
 import Link from 'next/link';
 import { LayoutDashboard, Kanban, Flag, FileText, Users, BarChart3, Trophy, Search, Sparkles } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data } = await supabase.from('profiles').select('*');
-
-  console.log('data', data);
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#1c120c] p-0 font-sans text-neutral-100 antialiased md:p-3">
       {/* Outer RPG Bezel / Window Frame */}
