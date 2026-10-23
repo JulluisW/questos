@@ -3,15 +3,17 @@
 import { useActionState } from 'react';
 import Link from 'next/link';
 import { loginWithEmail } from '@/actions/auth';
-import { SubmitButton } from './submit-button';
+import { SubmitButton } from '../../_components/submit-button';
+import { Compass } from 'lucide-react';
 // import { loginWithGoogle, loginWithMicrosoft } from '@/actions/auth-oauth';
 
-interface AuthFormProps {
+interface LoginFormProps {
   errorMessage?: string;
+  message?: string;
 }
 
-export function AuthForm({ errorMessage }: AuthFormProps) {
-  const [loginState, loginAction, loginIsPending] = useActionState(loginWithEmail, null);
+export function LoginForm({ errorMessage, message }: LoginFormProps) {
+  const [loginState, loginAction] = useActionState(loginWithEmail, null);
   return (
     <div className="bg-parchment relative flex w-full flex-col justify-center p-8 font-sans text-[#1c120c] md:w-1/2 md:p-12 lg:p-16">
       {/* Subtle Paper-Grain Background Overlay */}
@@ -31,10 +33,19 @@ export function AuthForm({ errorMessage }: AuthFormProps) {
           </p>
         </div>
 
-        {/* Server-Side Error Rendering */}
+        {/* Server-Side Error Banner (Crimson Wax Seal) */}
         {errorMessage && (
-          <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 font-sans text-xs text-red-800">
-            {errorMessage}
+          <div className="mb-4 flex items-center gap-2 rounded border border-red-900/30 bg-red-950/10 p-3 font-sans text-xs font-medium text-red-950">
+            <span className="shrink-0 text-red-800">⚠️</span>
+            <p>{errorMessage}</p>
+          </div>
+        )}
+
+        {/* Success / Notice Banner (Emerald Guild Scroll) */}
+        {message && (
+          <div className="mb-4 flex items-center gap-2 rounded border border-emerald-800/30 bg-emerald-950/10 p-3 font-sans text-xs font-medium text-emerald-950">
+            <span className="shrink-0 text-emerald-800">📜</span>
+            <p>{message}</p>
           </div>
         )}
 
@@ -58,7 +69,7 @@ export function AuthForm({ errorMessage }: AuthFormProps) {
               type="email"
               required
               placeholder="you@company.com"
-              className="w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:ring-[#5c4033] focus:outline-none"
+              className="focus:ring-wood w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:outline-none"
             />
           </div>
 
@@ -83,12 +94,15 @@ export function AuthForm({ errorMessage }: AuthFormProps) {
               type="password"
               required
               placeholder="••••••••"
-              className="w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:ring-[#5c4033] focus:outline-none"
+              className="focus:ring-wood w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:outline-none"
             />
           </div>
 
           {/* Extracted Client Component for Loading UI */}
-          <SubmitButton />
+          <SubmitButton>
+            Sign In to QuestOS
+            <Compass className="h-4 w-4" />
+          </SubmitButton>
         </form>
 
         <div className="relative my-6 flex items-center justify-center">
@@ -148,7 +162,7 @@ export function AuthForm({ errorMessage }: AuthFormProps) {
         <p className="mt-8 text-center font-sans text-xs text-stone-500">
           Belum punya akun?{' '}
           <Link
-            href="/register"
+            href="/signup"
             className="font-serif font-bold text-amber-800 underline transition-colors hover:text-amber-950"
           >
             Create your guild

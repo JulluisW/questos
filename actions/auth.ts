@@ -30,10 +30,16 @@ export async function loginWithEmail(_prevState: AuthState | null, formData: For
 export async function signUpWithEmail(_prevState: AuthState | null, formData: FormData): Promise<AuthState> {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
+  const confirmPassword = formData.get('confirmPassword') as string;
   const username = formData.get('username') as string;
+  const full_name = formData.get('full_name') as string;
 
   if (!email || !password) {
     return { error: 'Email and password are required to forge an account.' };
+  }
+
+  if (password !== confirmPassword) {
+    return { error: 'Passwords do not match.' };
   }
 
   const supabase = await createClient();
@@ -43,7 +49,8 @@ export async function signUpWithEmail(_prevState: AuthState | null, formData: Fo
     password,
     options: {
       data: {
-        username: username || email.split('@')[0], // Store username in user_meta_data
+        username: username || email.split('@')[0],
+        full_name: full_name || null,
       },
     },
   });
@@ -52,5 +59,11 @@ export async function signUpWithEmail(_prevState: AuthState | null, formData: Fo
     return { error: error.message };
   }
 
-  redirect('/login?message=Verification email sent.');
+  redirect('/login?message=Account forged successfully. Please sign in.');
+}
+
+export async function signOutAction() {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect('/login');
 }
