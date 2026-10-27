@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 
 import { QuestBoard } from '../_components/quest-board';
+import { AIQuestDecomposerTrigger } from '../_components/ai-quest-decomposer-dialog-trigger';
 
 type QuestBoardPageProps = {
   params: Promise<{ campaignId: string }>;
@@ -57,6 +58,8 @@ export default async function QuestBoardPage({ params }: QuestBoardPageProps) {
           <button className="rounded border border-[#d8ccbc] bg-[#f2ebdf] px-4 py-2 font-serif text-xs font-semibold text-stone-800 shadow-sm transition-colors hover:bg-[#eae1d2]">
             Sort
           </button>
+          <AIQuestDecomposerTrigger campaignId={campaign.id} />
+
           <button
             // onClick={() => setIsDialogOpen(true)}
             className="rounded border border-[#52372a] bg-[#3d271d] px-4 py-2 text-xs font-bold tracking-wider text-[#fbf8f3] uppercase shadow transition-all hover:bg-[#2b1b14]"
