@@ -11,7 +11,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {/* =========================================================================
             SIDEBAR NAVIGATION (Server Rendered)
             ========================================================================= */}
-        <aside className="z-20 hidden w-64 flex-col justify-between border-r border-[#332219] bg-[#1f140f] p-5 select-none md:flex">
+        <aside className="z-10 hidden w-64 flex-col justify-between border-r border-[#332219] bg-[#1f140f] p-5 select-none md:flex">
           <div>
             {/* Top Brand Block */}
             <div className="mb-8 flex items-center gap-3 px-2">
