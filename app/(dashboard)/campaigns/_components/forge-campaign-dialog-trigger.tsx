@@ -1,9 +1,8 @@
-// app/(dashboard)/board/_components/forge-campaign-dialog-trigger.tsx
 'use client';
 
 import { useState } from 'react';
-import { ForgeCampaignDialog } from './forge-campaign-dialog';
 import { cn } from '@/lib/utils';
+import { ForgeCampaignDialog } from './forge-campaign-dialog';
 
 type ForgeCampaignDialogTriggerProps = {
   className?: string;

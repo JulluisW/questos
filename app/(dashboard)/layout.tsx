@@ -28,7 +28,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             {/* Note: To make active states dynamic later, you can extract this <nav> into a <SidebarNav /> client component using usePathname() */}
             <nav className="space-y-1.5 font-sans">
               <SidebarItem icon={<LayoutDashboard className="h-4 w-4" />} label="Command Center" href="/dashboard" />
-              <SidebarItem icon={<Kanban className="h-4 w-4" />} label="Quest Board" href="/quest-board" />
+              <SidebarItem icon={<Kanban className="h-4 w-4" />} label="Quest Board" href="/board" />
               <SidebarItem icon={<Flag className="h-4 w-4" />} label="Campaigns" href="/campaigns" />
               <SidebarItem icon={<FileText className="h-4 w-4" />} label="Templates" href="/templates" />
               <SidebarItem icon={<Users className="h-4 w-4" />} label="Guild & Team" href="/team" />

@@ -119,6 +119,10 @@ export function ForgeCampaignDialog({ isOpen, onClose }: ForgeCampaignDialogProp
                 <span>Forge Campaign</span>
                 <Sparkles className="h-4 w-4 text-amber-400" />
               </SubmitButton>
+              <SubmitButton name="intent" value="with_quests" className="mt-2 w-full">
+                <span>Forge Campaign With Quests</span>
+                <Sparkles className="h-4 w-4 text-amber-400" />
+              </SubmitButton>
             </div>
           </div>
         </form>

@@ -1,28 +1,45 @@
-// actions/campaigns.ts
+// app/actions/campaigns.ts
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { generateCampaignQuestsAction } from './ai-quests';
 
-export type ActionState = {
+export type CreateCampaignState = {
   error?: string;
   fieldErrors?: {
     name?: string;
     ultimate_goal?: string;
   };
-};
+} | null;
 
-export async function createCampaignAction(_prevState: ActionState | null, formData: FormData): Promise<ActionState> {
-  const name = (formData.get('name') as string)?.trim();
-  const ultimate_goal = (formData.get('ultimate_goal') as string)?.trim();
+export async function createCampaignAction(
+  prevState: CreateCampaignState,
+  formData: FormData
+): Promise<CreateCampaignState> {
+  const supabase = await createClient();
 
-  // 1. Schema Validation
-  const fieldErrors: ActionState['fieldErrors'] = {};
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!name || name.length < 3) {
-    fieldErrors.name = 'Campaign title must be at least 3 characters.';
-  } else if (name.length > 60) {
-    fieldErrors.name = 'Campaign title cannot exceed 60 characters.';
+  if (!user) {
+    return { error: 'Authentication required to forge a campaign.' };
+  }
+
+  const name = formData.get('name')?.toString().trim() ?? '';
+  const ultimate_goal = formData.get('ultimate_goal')?.toString().trim() || null;
+  const guild_id = formData.get('guild_id')?.toString().trim() || null;
+
+  // Identify which button submitted the form: 'manual' vs 'with_quests'
+  const intent = formData.get('intent')?.toString() || 'manual';
+
+  // Field Validation
+  const fieldErrors: { name?: string; ultimate_goal?: string } = {};
+
+  if (!name || name.length < 3 || name.length > 60) {
+    fieldErrors.name = 'Campaign name must be between 3 and 60 characters.';
   }
 
   if (ultimate_goal && ultimate_goal.length > 200) {
@@ -33,48 +50,34 @@ export async function createCampaignAction(_prevState: ActionState | null, formD
     return { fieldErrors };
   }
 
-  const supabase = await createClient();
+  // Generate initial starter quests if "Forge Campaign With Quests" was clicked
+  let initialQuests: Array<{ title: string; priority: 'low' | 'medium' | 'high'; xp_reward: number }> = [];
 
-  // 2. Resolve Authenticated User
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: 'Your session has expired. Please log in again.' };
+  if (intent === 'with_quests') {
+    initialQuests = [
+      { title: 'Establish Realm Strategy & Objectives', priority: 'high', xp_reward: 100 },
+      { title: 'Assign Guild Members & Roles', priority: 'medium', xp_reward: 50 },
+      { title: 'Setup Initial Task Backlog', priority: 'low', xp_reward: 25 },
+    ];
   }
 
-  // 3. Resolve Active Guild Membership
-  const { data: membership, error: guildError } = await supabase
-    .from('guild_members')
-    .select('guild_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single();
+  // Execute database transaction via RPC
+  const { data: campaignId, error } = await supabase.rpc('forge_campaign_with_quests', {
+    p_name: name,
+    p_ultimate_goal: ultimate_goal,
+    p_guild_id: guild_id,
+    p_quests: initialQuests,
+  });
 
-  if (guildError || !membership) {
-    return { error: 'You must belong to a guild before forging a campaign.' };
+  await generateCampaignQuestsAction(
+    campaignId,
+    `Decompose the campaign "${name}" into actionable quests for the guild, considering the ultimate goal: "${ultimate_goal || 'N/A'}".`
+  );
+
+  if (error) {
+    return { error: `Campaign forging failed: ${error.message}` };
   }
 
-  // 4. Database Mutation
-  const { data: newCampaign, error: insertError } = await supabase
-    .from('campaigns')
-    .insert([
-      {
-        guild_id: membership.guild_id,
-        name,
-        ultimate_goal: ultimate_goal || null,
-        created_by: user.id,
-      },
-    ])
-    .select('id')
-    .single();
-
-  if (insertError || !newCampaign) {
-    return { error: insertError?.message || 'Failed to forge campaign.' };
-  }
-
-  // 5. URL-Driven State Redirect
-  redirect(`/board/${newCampaign.id}`);
+  revalidatePath('/board');
+  redirect(`/board/${campaignId}`);
 }
