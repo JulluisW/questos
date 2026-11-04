@@ -25,3 +25,6 @@ export type CampaignStatus = Enums<'campaign_status'>;
 export type CampaignWithQuests = Campaign & {
   quests: Quest[];
 };
+
+// Append-only status history (written by DB trigger, read by the timeline)
+export type QuestStatusEvent = Tables<'quest_status_events'>;

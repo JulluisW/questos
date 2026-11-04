@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 
 import { QuestBoard } from '@/features/quests/components/quest-board';
 import { AIQuestDecomposerTrigger } from '@/features/ai-coach/components/ai-quest-decomposer-dialog-trigger';
+import { CampaignViewTabs } from '@/features/campaigns/components/campaign-view-tabs';
 
 type QuestBoardPageProps = {
   params: Promise<{ campaignId: string }>;
@@ -46,6 +47,8 @@ export default async function QuestBoardPage({ params }: QuestBoardPageProps) {
         </div>
 
         <div className="flex items-center gap-3">
+          <CampaignViewTabs campaignId={campaign.id} active="board" />
+
           {/* Custom Sprint Progress Bar */}
           <div className="mr-4 hidden h-2.5 w-48 overflow-hidden rounded-full bg-[#ebdcca] shadow-inner md:flex">
             <div className="w-[66%] rounded-r-full border-r-2 border-[#fbf8f3] bg-[#b45309]"></div>

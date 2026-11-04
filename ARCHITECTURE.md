@@ -39,12 +39,13 @@ Application code lives under `src/` (config, `public/` and `supabase/` stay at t
 src/
 ├── app/                        # routing only: pages, layouts, globals.css
 │   ├── (auth)/                 # /login, /signup
-│   └── (dashboard)/            # /board, /board/[campaignId], /dashboard, /records
+│   └── (dashboard)/            # /board, /board/[campaignId], /board/[campaignId]/timeline, /dashboard, /records
 ├── features/
 │   ├── auth/                   # actions.ts (login/signup/signout), components/ (forms)
 │   ├── campaigns/              # actions.ts (createCampaignAction), components/ (Forge Campaign dialog)
 │   ├── quests/                 # actions.ts, constants.ts, drag.ts, components/ (board, column, card)
-│   └── ai-coach/               # actions.ts, models.ts, schemas.ts, components/ (decomposer dialog)
+│   ├── ai-coach/               # actions.ts, models.ts, schemas.ts, components/ (decomposer dialog)
+│   └── timeline/               # queries.ts, build.ts (pure model), components/ (campaign timeline)
 ├── components/
 │   ├── ui/                     # shared primitives (SubmitButton; shadcn target)
 │   └── layout/                 # app shell: AppSidebar, AppHeader
@@ -105,6 +106,16 @@ flowchart TB
 3. **`/board/[campaignId]`** loads the campaign's quests server-side and hands them to the client `QuestBoard`.
 4. **Dragging** a card updates local state and calls `updateQuestStatusAction`.
 5. **AI decomposition:** `generateCampaignQuestsAction` asks the model for a `CampaignDecompositionSchema` object, bulk-inserts the quests, and `revalidatePath`s the board.
+6. **Status history:** every insert or status change on `quests` is logged by a DB trigger into `quest_status_events` — no app code writes history.
+
+### Campaign timeline (`/board/[campaignId]/timeline`)
+
+**Reference date:** the timeline is plotted on `quest_status_events.changed_at` — the moment a card actually moved — not on `created_at`/`completed_at` alone, which cannot show when work started, time spent waiting vs. working, or cards moved backwards/reopened.
+
+- `features/timeline/queries.ts` (server) loads the campaign, its quests, events and the names of the people involved. If the events table is missing it falls back to `historySource: 'derived'` (history rebuilt from quest timestamps) and the UI says so.
+- `features/timeline/build.ts` (pure) turns events into per-quest **segments** (one per stage visit), per-quest metrics (lead time = posted→done, cycle time = first started→done, moves, reopens, time per stage), per-day **cumulative flow** + move counts, and the summary KPIs.
+- `components/campaign-timeline.tsx` renders on the client only (dates use the viewer's timezone): KPI tiles → zoom/sort/status filters → one horizontally-scrolling canvas where the flow chart, daily move strip and quest lanes share a single date axis. Hovering a day highlights that column across every lane; hovering a lane segment shows a detail card (stage, entered/left, time in stage, moved by, quest stats). Both hover cards use one Base UI tooltip with detached triggers.
+- Backfilled history is flagged `is_inferred` and drawn dashed / labelled "Estimated".
 
 ### Legacy (Phase 1–2)
 
@@ -129,6 +140,7 @@ Versioned in `supabase/migrations/`:
 | `…01_schema_tables.sql` | `profiles`, `guilds`, `guild_members`, `campaigns`, `quests`; enums `guild_role`, `quest_status`, `campaign_status`, `quest_priorities` |
 | `…02_security_functions.sql` | `SECURITY DEFINER` helpers used by policies (avoid RLS recursion, Postgres 42P17) |
 | `…03_rls_policies.sql` | Row Level Security policies (guild-membership based) |
+| `20261104000001_quest_status_events.sql` | Append-only `quest_status_events` log, `on_quest_status_change` trigger (SECURITY DEFINER), read-only RLS, backfill of existing quests (`is_inferred = true`) |
 
 Regenerate `src/types/database.types.ts` with the Supabase CLI after any schema change; `src/types/index.ts` derives `Quest`, `Campaign`, etc. from it. Note the generated `quests.status` and `is_milestone` columns are nullable.
 
@@ -164,4 +176,5 @@ Regenerate `src/types/database.types.ts` with the Supabase CLI after any schema 
 | Date | Summary |
 |------|---------|
 | 2026-05-29 | Initial living architecture doc: Phase 1 localStorage → Phase 2 Supabase MVP, gamification math, hook-based data flow, auth guard, schema contract, Phase 3 placeholder. |
+| 2026-11-04 | Added campaign timeline (`features/timeline`, `/board/[campaignId]/timeline`) and the trigger-written `quest_status_events` history table; timeline maps on status-change time. |
 | 2026-11-04 | Restructured into `src/` with feature modules (`features/auth`, `campaigns`, `quests`, `ai-coach`), shared `components/{ui,layout}`, single `@/types` source. Rewrote stack, data flow, schema and auth sections for the server-first architecture (SSR auth + proxy, server actions, versioned migrations/RLS, AI SDK). Phase 1–2 client-hook design moved to a legacy note; XP awarding flagged as not yet re-implemented. |

@@ -129,6 +129,38 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"quest_status_events": {
+                  Row: {
+                    "campaign_id": string,"changed_at": string,"changed_by": string | null,"from_status": Database["public"]['Enums']["quest_status"] | null,"id": string,"is_inferred": boolean,"quest_id": string,"to_status": Database["public"]['Enums']["quest_status"]
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "campaign_id": string,"changed_at"?: string,"changed_by"?: string | null,"from_status"?: Database["public"]['Enums']["quest_status"] | null,"id"?: string,"is_inferred"?: boolean,"quest_id": string,"to_status": Database["public"]['Enums']["quest_status"]
+                  }
+                  Update: {
+                    "campaign_id"?: string,"changed_at"?: string,"changed_by"?: string | null,"from_status"?: Database["public"]['Enums']["quest_status"] | null,"id"?: string,"is_inferred"?: boolean,"quest_id"?: string,"to_status"?: Database["public"]['Enums']["quest_status"]
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "quest_status_events_campaign_id_fkey"
+      columns: ["campaign_id"]
+isOneToOne: false
+      referencedRelation: "campaigns"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "quest_status_events_changed_by_fkey"
+      columns: ["changed_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "quest_status_events_quest_id_fkey"
+      columns: ["quest_id"]
+isOneToOne: false
+      referencedRelation: "quests"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
