@@ -17,8 +17,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Operation Berk | Quest Board',
-  description: 'A parchment-and-wood campaign board for turning goals into legends.',
+  title: { default: 'QuestOS', template: '%s · QuestOS' },
+  description: 'Turn goals into campaigns, let the AI Oracle plan the quests, and run them on a parchment Kanban board.',
 };
 
 export default function RootLayout({

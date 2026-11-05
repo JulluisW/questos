@@ -1,60 +1,105 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
-import type { QuestStatus } from '@/types/quest';
+import { revalidatePath } from 'next/cache';
+import { createClient, getUserId } from '@/lib/supabase/server';
+import { dbErrorMessage } from '@/lib/db-errors';
+import { fieldErrors, formToObject, idSchema, questFormSchema, questStatusSchema } from '@/lib/validation';
+import type { ActionState, QuestStatus } from '@/types';
 
-export async function createQuestAction(formData: FormData) {
-  try {
-    const supabase = await createClient();
+const NO_PERMISSION = 'Only the guild boss or a manager can change quests here.';
 
-    const title = formData.get('title') as string;
-    const description = formData.get('description') as string;
-    const campaign_id = formData.get('campaign_id') as string;
-    const is_milestone = formData.get('is_milestone') === 'on';
-
-    if (!title || !campaign_id) {
-      return { error: 'Quest title and campaign ID are required.' };
-    }
-
-    const newQuest = {
-      title,
-      description: description || null,
-      campaign_id,
-      status: 'pending' as QuestStatus,
-      is_milestone,
-      xp_reward: is_milestone ? 250 : 50,
+/** Creates a quest, or updates it when `quest_id` is present. */
+export async function saveQuestAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const raw = formToObject(formData);
+  const parsed = questFormSchema.safeParse(raw);
+  const status = questStatusSchema.optional().safeParse(raw.status || undefined);
+  if (!parsed.success || !status.success) {
+    return {
+      ok: false,
+      error: 'Please fix the highlighted fields.',
+      fieldErrors: parsed.success ? {} : fieldErrors(parsed.error),
     };
-
-    const { data, error } = await supabase.from('quests').insert([newQuest]).select().single();
-
-    if (error) return { error: error.message };
-
-    return { success: true, quest: data };
-  } catch {
-    return { error: 'Failed to reach the server.' };
   }
+
+  const supabase = await createClient();
+  if (!(await getUserId(supabase))) return { ok: false, error: 'Please sign in again.' };
+
+  const { quest_id, campaign_id, ...fields } = parsed.data;
+  const values = { ...fields, ...(status.data ? { status: status.data } : {}) };
+
+  const { data, error } = quest_id
+    ? await supabase.from('quests').update(values).eq('id', quest_id).select('id')
+    : await supabase.from('quests').insert({ ...values, campaign_id }).select('id');
+
+  if (error || !data?.length) {
+    return { ok: false, error: dbErrorMessage(error, NO_PERMISSION, NO_PERMISSION) };
+  }
+
+  revalidatePath(`/board/${campaign_id}`);
+  revalidatePath('/dashboard');
+  return { ok: true, message: quest_id ? 'Quest updated.' : 'Quest posted to the board.' };
 }
 
-export async function updateQuestStatusAction(id: string, newStatus: QuestStatus) {
-  try {
-    const supabase = await createClient();
+export async function deleteQuestAction(questId: string): Promise<ActionState> {
+  const id = idSchema.safeParse(questId);
+  if (!id.success) return { ok: false, error: 'Invalid request.' };
 
-    const { error } = await supabase
-      .from('quests')
-      .update({
-        status: newStatus,
-        completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
-      })
-      .eq('id', id);
+  const supabase = await createClient();
+  if (!(await getUserId(supabase))) return { ok: false, error: 'Please sign in again.' };
 
-    if (error) {
-      // Return the error safely instead of throwing a hard exception
-      return { error: 'Database update failed.' };
-    }
-
-    return { success: true };
-  } catch {
-    // Catch network failures or server crashes
-    return { error: 'Failed to reach the server.' };
+  const { data, error } = await supabase.from('quests').delete().eq('id', id.data).select('campaign_id');
+  if (error || !data?.length) {
+    return { ok: false, error: dbErrorMessage(error, NO_PERMISSION, NO_PERMISSION) };
   }
+
+  revalidatePath(`/board/${data[0].campaign_id}`);
+  revalidatePath('/dashboard');
+  return { ok: true };
+}
+
+export async function updateQuestStatusAction(questId: string, newStatus: QuestStatus): Promise<ActionState> {
+  const id = idSchema.safeParse(questId);
+  const status = questStatusSchema.safeParse(newStatus);
+  if (!id.success || !status.success) return { ok: false, error: 'Invalid request.' };
+
+  const supabase = await createClient();
+  if (!(await getUserId(supabase))) return { ok: false, error: 'Please sign in again.' };
+
+  const { data, error } = await supabase
+    .from('quests')
+    .update({ status: status.data })
+    .eq('id', id.data)
+    .select('campaign_id');
+
+  if (error || !data?.length) {
+    return { ok: false, error: dbErrorMessage(error, 'You cannot move this quest.', 'You cannot move this quest.') };
+  }
+
+  revalidatePath(`/board/${data[0].campaign_id}`);
+  revalidatePath('/dashboard');
+  return { ok: true };
+}
+
+/** Worker-friendly: assign the quest to yourself, or release your claim. */
+export async function claimQuestAction(questId: string, claim: boolean): Promise<ActionState> {
+  const id = idSchema.safeParse(questId);
+  if (!id.success) return { ok: false, error: 'Invalid request.' };
+
+  const supabase = await createClient();
+  const userId = await getUserId(supabase);
+  if (!userId) return { ok: false, error: 'Please sign in again.' };
+
+  const { data, error } = await supabase
+    .from('quests')
+    .update({ assignee_id: claim ? userId : null })
+    .eq('id', id.data)
+    .select('campaign_id');
+
+  if (error || !data?.length) {
+    return { ok: false, error: dbErrorMessage(error, 'You cannot claim this quest.', 'You cannot claim this quest.') };
+  }
+
+  revalidatePath(`/board/${data[0].campaign_id}`);
+  revalidatePath('/dashboard');
+  return { ok: true };
 }

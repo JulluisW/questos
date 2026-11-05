@@ -1,14 +1,16 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import type { Database } from '@/types/database.types';
+
+const AUTH_PAGES = ['/login', '/signup'];
+const PUBLIC_PREFIXES = ['/auth'];
+export const HOME_PATH = '/dashboard';
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
+  let supabaseResponse = NextResponse.next({ request });
 
-  // With Fluid compute, don't put this client in a global environment
-  // variable. Always create a new one on each request.
-  const supabase = createServerClient(
+  // Create a fresh client per request (never share across requests).
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -18,11 +20,8 @@ export async function updateSession(request: NextRequest) {
         },
         setAll(cookiesToSet, headers) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({
-            request,
-          });
+          supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options));
-
           if (headers) {
             Object.entries(headers).forEach(([key, value]) => supabaseResponse.headers.set(key, value));
           }
@@ -31,45 +30,36 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Do not run code between createServerClient and
-  // supabase.auth.getClaims(). A simple mistake could make it very hard to debug
-  // issues with users being randomly logged out.
+  // Do not run code between createServerClient and getClaims(): getClaims
+  // refreshes an expiring session and writes the new cookies via setAll.
+  const { data } = await supabase.auth.getClaims();
+  const isSignedIn = Boolean(data?.claims?.sub);
 
-  // IMPORTANT: If you remove getClaims() and you use server-side rendering
-  // with the Supabase client, your users may be randomly logged out.
-  // const { data } = await supabase.auth.getClaims();
+  const { pathname, search } = request.nextUrl;
+  const isAuthPage = AUTH_PAGES.some((p) => pathname.startsWith(p));
+  const isPublic = isAuthPage || PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 
-  // const user = data?.claims;
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/signup');
-
-  if (!user && !isAuthPage && !request.nextUrl.pathname.startsWith('/auth')) {
+  if (!isSignedIn && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    return NextResponse.redirect(url);
+    url.search = '';
+    if (pathname !== '/') url.searchParams.set('next', `${pathname}${search}`);
+    return redirectWithCookies(url, supabaseResponse);
   }
 
-  if (user && isAuthPage) {
+  if (isSignedIn && isAuthPage) {
     const url = request.nextUrl.clone();
-    url.pathname = '/board';
-    return NextResponse.redirect(url);
+    url.pathname = HOME_PATH;
+    url.search = '';
+    return redirectWithCookies(url, supabaseResponse);
   }
-  // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
-  // creating a new response object with NextResponse.next() make sure to:
-  // 1. Pass the request in it, like so:
-  //    const myNewResponse = NextResponse.next({ request })
-  // 2. Copy over the cookies, like so:
-  //    myNewResponse.cookies.setAll(supabaseResponse.cookies.getAll())
-  // 3. Change the myNewResponse object to fit your needs, but avoid changing
-  //    the cookies!
-  // 4. Finally:
-  //    return myNewResponse
-  // If this is not done, you may be causing the browser and server to go out
-  // of sync and terminate the user's session prematurely!
 
+  // Must return supabaseResponse as-is so refreshed cookies reach the browser.
   return supabaseResponse;
+}
+
+function redirectWithCookies(url: URL, from: NextResponse) {
+  const response = NextResponse.redirect(url);
+  from.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
+  return response;
 }

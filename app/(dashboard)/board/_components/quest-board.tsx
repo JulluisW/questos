@@ -1,167 +1,276 @@
 'use client';
 
 import { useCallback, useId, useMemo, useState } from 'react';
-import { Feather, ShieldCheck, Hammer, Award } from 'lucide-react';
-import type { Quest, QuestStatus } from '@/types/quest';
-import { BoardColumn } from './board-column';
-import { ScrollCard } from './scroll-card';
-import { COLUMN_IDS, COLUMN_LABELS } from '@/lib/quests/constants';
 import {
   DndContext,
-  DragEndEvent,
   DragOverlay,
-  DragStartEvent,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  type KeyboardCoordinateGetter,
 } from '@dnd-kit/core';
+import { Award, Hammer, Plus, ShieldCheck } from 'lucide-react';
+import { claimQuestAction, deleteQuestAction, updateQuestStatusAction } from '@/actions/quests';
+import { COLUMN_IDS, COLUMN_LABELS } from '@/lib/quests/constants';
 import { resolveTargetStatus } from '@/lib/quests/drag';
-import { updateQuestStatusAction } from '@/actions/quests';
+import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Notice } from '@/components/ui/notice';
+import type { BoardMember, Quest, QuestStatus } from '@/types';
+import { BoardColumn } from './board-column';
+import { DraggableQuestCard, QuestCardView } from './quest-card';
+import { QuestDialog } from './quest-dialog';
+import { OracleButton } from './oracle-dialog';
 
-// 1. Define dynamic styles for the column banners
-const COLUMN_STYLES: Record<QuestStatus, { color: string; icon: React.ReactNode }> = {
+const COLUMN_STYLES: Record<QuestStatus, { color: string; icon: React.ReactNode; empty: string }> = {
   pending: {
     color: 'bg-blue-900 border-blue-950 text-blue-100',
     icon: <ShieldCheck className="h-3.5 w-3.5 text-blue-300" />,
+    empty: 'No quests waiting',
   },
   'in-progress': {
     color: 'bg-emerald-900 border-emerald-950 text-emerald-100',
     icon: <Hammer className="h-3.5 w-3.5 text-emerald-300" />,
+    empty: 'Drag a quest here to start it',
   },
   completed: {
     color: 'bg-red-950 border-red-900 text-red-100',
     icon: <Award className="h-3.5 w-3.5 text-red-300" />,
+    empty: 'Victories land here',
   },
 };
 
-type QuestBoardProps = {
-  initialQuests: Quest[];
+/** Arrow Left/Right jumps the dragged card to the neighbouring column. */
+const columnKeyboardCoordinates: KeyboardCoordinateGetter = (event, { context, currentCoordinates }) => {
+  if (event.code !== 'ArrowRight' && event.code !== 'ArrowLeft') return undefined;
+  event.preventDefault();
+
+  const { collisionRect, droppableRects } = context;
+  if (!collisionRect) return undefined;
+
+  const center = collisionRect.left + collisionRect.width / 2;
+  const columns = COLUMN_IDS.map((id) => droppableRects.get(id))
+    .filter((rect): rect is NonNullable<typeof rect> => Boolean(rect))
+    .map((rect) => rect.left + rect.width / 2)
+    .sort((a, b) => a - b);
+
+  const target =
+    event.code === 'ArrowRight' ? columns.find((c) => c > center + 1) : [...columns].reverse().find((c) => c < center - 1);
+  if (target === undefined) return currentCoordinates;
+
+  return { x: currentCoordinates.x + (target - center), y: currentCoordinates.y };
 };
 
-export function QuestBoard({ initialQuests }: QuestBoardProps) {
-  const [quests, setQuests] = useState<Quest[]>(initialQuests);
+type Banner = { tone: 'error' | 'success' | 'info'; text: string } | null;
+
+type QuestBoardProps = {
+  campaignId: string;
+  campaignGoal: string | null;
+  initialQuests: Quest[];
+  members: BoardMember[];
+  currentUserId: string;
+  canManage: boolean;
+  isGuild: boolean;
+  aiEnabled: boolean;
+  initialBanner?: Banner;
+};
+
+export function QuestBoard({
+  campaignId,
+  campaignGoal,
+  initialQuests,
+  members,
+  currentUserId,
+  canManage,
+  isGuild,
+  aiEnabled,
+  initialBanner = null,
+}: QuestBoardProps) {
+  const [quests, setQuests] = useState(initialQuests);
+  // When the server re-renders (after revalidatePath), adopt the fresh list.
+  const [syncedFrom, setSyncedFrom] = useState(initialQuests);
+  if (syncedFrom !== initialQuests) {
+    setSyncedFrom(initialQuests);
+    setQuests(initialQuests);
+  }
+
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [banner, setBanner] = useState<Banner>(initialBanner);
+  const [editing, setEditing] = useState<Quest | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<Quest | null>(null);
 
-  const activeQuest = useMemo(() => (activeId ? quests.find((q) => q.id === activeId) : undefined), [activeId, quests]);
+  const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+  const isMember = memberById.has(currentUserId);
+  const canClaim = isGuild && isMember;
 
-  const questCategories = useMemo(
-    () => ({
-      pending: quests.filter((quest) => quest.status === 'pending'),
-      'in-progress': quests.filter((quest) => quest.status === 'in-progress'),
-      completed: quests.filter((quest) => quest.status === 'completed'),
-    }),
-    [quests]
-  );
+  const columns = useMemo(() => {
+    const grouped: Record<QuestStatus, Quest[]> = { pending: [], 'in-progress': [], completed: [] };
+    for (const q of quests) grouped[q.status ?? 'pending'].push(q);
+    // Most recently finished first in Completed.
+    grouped.completed.sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''));
+    return grouped;
+  }, [quests]);
 
-  const renderQuestCard = (quest: Quest) => {
-    const isCompleted = quest.status === 'completed';
-    return (
-      <ScrollCard
-        key={quest.id}
-        id={quest.id}
-        title={quest.title}
-        badge={{
-          label: quest.is_milestone ? 'MILESTONE' : 'QUEST',
-          color: quest.is_milestone
-            ? 'bg-[#e8b5b5] text-[#8a3333] border border-[#d88888]'
-            : 'bg-[#e8d2ac] text-[#8c6020] border border-[#d8bc88]',
-        }}
-        meta={[quest.campaign_id]} // (Optional: you might want to hide raw UUIDs in the UI later)
-        assignee="Unassigned"
-        xp={quest.is_milestone ? '+100 XP' : '+40 XP'}
-        completed={isCompleted}
-        waxSeal={isCompleted}
-        symbol={
-          quest.is_milestone ? (
-            <Award className="h-4 w-4 text-amber-800" />
-          ) : (
-            <Feather className="h-4 w-4 text-amber-800" />
-          )
-        }
-      />
-    );
-  };
+  const activeQuest = activeId ? quests.find((q) => q.id === activeId) : undefined;
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: columnKeyboardCoordinates })
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
+    setActiveId(String(event.active.id));
   }, []);
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
-      const { active, over } = event;
       setActiveId(null);
-
+      const { active, over } = event;
       if (!over) return;
 
-      const draggedId = active.id as string;
-      const overId = over.id as string;
+      const draggedId = String(active.id);
+      const targetStatus = resolveTargetStatus(quests, String(over.id));
+      const dragged = quests.find((q) => q.id === draggedId);
+      if (!dragged || !targetStatus || dragged.status === targetStatus) return;
 
-      if (draggedId === overId) return;
+      const previous = dragged.status;
+      setQuests((prev) =>
+        prev.map((q) =>
+          q.id === draggedId
+            ? { ...q, status: targetStatus, completed_at: targetStatus === 'completed' ? new Date().toISOString() : null }
+            : q
+        )
+      );
 
-      const targetStatus = resolveTargetStatus(quests, overId);
-      const draggedQuest = quests.find((q) => q.id === draggedId);
-
-      if (draggedQuest && targetStatus && draggedQuest.status !== targetStatus) {
-        // Store the old status in case we need to roll back
-        const previousStatus = draggedQuest.status;
-
-        // A. OPTIMISTIC UPDATE: Instantly move the card in the UI
-        setQuests((prev) => prev.map((q) => (q.id === draggedId ? { ...q, status: targetStatus } : q)));
-
-        // B. SERVER SYNC: Fire the background database mutation
-        const result = await updateQuestStatusAction(draggedId, targetStatus);
-
-        if (result?.error) {
-          console.error('Failed to persist drag:', result.error);
-
-          // Revert the card to its original column
-          setQuests((prev) => prev.map((q) => (q.id === draggedId ? { ...q, status: previousStatus } : q)));
-
-          // Notify the user safely
-          alert(`The guild registry rejected the update: ${result.error}`);
-        }
+      const result = await updateQuestStatusAction(draggedId, targetStatus);
+      if (result && !result.ok) {
+        setQuests((prev) =>
+          prev.map((q) => (q.id === draggedId ? { ...q, status: previous, completed_at: dragged.completed_at } : q))
+        );
+        setBanner({ tone: 'error', text: result.error });
       }
     },
-    [quests] // Add quests to the dependency array so resolveTargetStatus has the latest data
+    [quests]
   );
+
+  const handleClaim = useCallback(async (quest: Quest, claim: boolean) => {
+    const result = await claimQuestAction(quest.id, claim);
+    if (result && !result.ok) setBanner({ tone: 'error', text: result.error });
+  }, []);
+
   const dndId = useId();
+  const cardProps = {
+    canManage,
+    canClaim,
+    currentUserId,
+    onEdit: setEditing,
+    onDelete: setDeleting,
+    onClaim: handleClaim,
+  };
 
   return (
-    <div className="grid flex-1 scrollbar-thin scrollbar-thumb-amber-900/20 grid-cols-3 gap-6 overflow-x-auto pb-6">
-      <DndContext id={dndId} sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        {COLUMN_IDS.map((colId: QuestStatus) => {
-          const columnQuests = questCategories[colId];
-          const style = COLUMN_STYLES[colId];
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-stone-500">
+          Drag cards between columns, or focus the grip and use Space + arrow keys.
+          {!canManage && isGuild && ' As a worker you can move and claim quests.'}
+        </p>
+        {canManage && (
+          <div className="flex flex-wrap items-center gap-2">
+            <OracleButton
+              campaignId={campaignId}
+              campaignGoal={campaignGoal}
+              aiEnabled={aiEnabled}
+              onDone={(text) => setBanner({ tone: 'success', text })}
+            />
+            <Button onClick={() => setCreating(true)}>
+              <Plus className="h-3.5 w-3.5" /> Post Quest
+            </Button>
+          </div>
+        )}
+      </div>
 
-          return (
-            <BoardColumn
-              quests={columnQuests}
-              status={colId}
-              key={colId}
-              title={COLUMN_LABELS[colId]}
-              count={columnQuests.length} // Dynamically count real quests
-              bannerColor={style.color}
-              bannerIcon={style.icon}
-            >
-              {columnQuests.map(renderQuestCard)}
-            </BoardColumn>
-          );
-        })}
+      {banner && (
+        <Notice tone={banner.tone} onDismiss={() => setBanner(null)}>
+          {banner.text}
+        </Notice>
+      )}
+
+      <DndContext id={dndId} sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveId(null)}>
+        <div className="-mx-4 overflow-x-auto px-4 pb-4 md:mx-0 md:px-0">
+          <div className="grid min-w-[52rem] grid-cols-3 gap-4 md:min-w-0 md:gap-6">
+            {COLUMN_IDS.map((status) => {
+              const style = COLUMN_STYLES[status];
+              const list = columns[status];
+              return (
+                <BoardColumn
+                  key={status}
+                  status={status}
+                  title={COLUMN_LABELS[status]}
+                  count={list.length}
+                  bannerColor={style.color}
+                  bannerIcon={style.icon}
+                  emptyText={style.empty}
+                >
+                  {list.map((quest) => (
+                    <DraggableQuestCard
+                      key={quest.id}
+                      quest={quest}
+                      assignee={quest.assignee_id ? memberById.get(quest.assignee_id) : undefined}
+                      {...cardProps}
+                    />
+                  ))}
+                </BoardColumn>
+              );
+            })}
+          </div>
+        </div>
 
         <DragOverlay>
           {activeQuest ? (
-            <div className="rotate-1 cursor-grabbing shadow-[0_12px_24px_rgba(0,0,0,0.45)] brightness-95">
-              {renderQuestCard(activeQuest)}
-            </div>
+            <QuestCardView
+              quest={activeQuest}
+              assignee={activeQuest.assignee_id ? memberById.get(activeQuest.assignee_id) : undefined}
+              overlay
+              {...cardProps}
+            />
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      <QuestDialog
+        open={creating || Boolean(editing)}
+        onClose={() => {
+          setCreating(false);
+          setEditing(null);
+        }}
+        campaignId={campaignId}
+        quest={editing}
+        members={members}
+        onSaved={(text) => {
+          setCreating(false);
+          setEditing(null);
+          setBanner({ tone: 'success', text });
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        title="Abandon this quest?"
+        description={
+          <>
+            <strong>{deleting?.title}</strong> will be removed from the board permanently.
+          </>
+        }
+        confirmLabel="Abandon quest"
+        onConfirm={() => deleteQuestAction(deleting!.id)}
+        onSuccess={() => setBanner({ tone: 'info', text: 'Quest abandoned.' })}
+      />
     </div>
   );
 }

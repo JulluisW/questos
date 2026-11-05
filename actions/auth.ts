@@ -1,50 +1,64 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { z } from 'zod';
+import { createClient } from '@/lib/supabase/server';
+import { safeNextPath } from '@/lib/utils';
+import { formToObject } from '@/lib/validation';
 
-export type AuthState = {
-  error?: string;
-};
+export type AuthState = { error?: string } | null;
 
-export async function loginWithEmail(_prevState: AuthState | null, formData: FormData): Promise<AuthState> {
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
+const loginSchema = z.object({
+  email: z.email('Enter a valid email address'),
+  password: z.string().min(1, 'Enter your password'),
+  next: z.string().optional(),
+});
 
-  // 1. Initialize the secure SERVER client
+const signupSchema = z
+  .object({
+    email: z.email('Enter a valid email address'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    confirmPassword: z.string(),
+    username: z
+      .string()
+      .trim()
+      .regex(/^[a-zA-Z0-9_]{3,30}$/, 'Username: 3-30 letters, numbers or underscores')
+      .optional()
+      .or(z.literal('')),
+    full_name: z.string().trim().max(80, 'Full name is too long').optional(),
+    next: z.string().optional(),
+  })
+  .refine((v) => v.password === v.confirmPassword, { message: 'Passwords do not match.' });
+
+export async function loginWithEmail(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const parsed = loginSchema.safeParse(formToObject(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
   const supabase = await createClient();
-
-  // 2. Attempt login
   const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
+    email: parsed.data.email,
+    password: parsed.data.password,
   });
 
   if (error) {
-    return { error: error.message };
+    return {
+      error: /email not confirmed/i.test(error.message)
+        ? 'Please confirm your email first. Check your inbox for the link.'
+        : 'Invalid email or password.',
+    };
   }
 
-  redirect('/board');
+  redirect(safeNextPath(parsed.data.next));
 }
 
-export async function signUpWithEmail(_prevState: AuthState | null, formData: FormData): Promise<AuthState> {
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
-  const confirmPassword = formData.get('confirmPassword') as string;
-  const username = formData.get('username') as string;
-  const full_name = formData.get('full_name') as string;
+export async function signUpWithEmail(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const parsed = signupSchema.safeParse(formToObject(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  if (!email || !password) {
-    return { error: 'Email and password are required to forge an account.' };
-  }
-
-  if (password !== confirmPassword) {
-    return { error: 'Passwords do not match.' };
-  }
-
+  const { email, password, username, full_name, next } = parsed.data;
   const supabase = await createClient();
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -55,15 +69,18 @@ export async function signUpWithEmail(_prevState: AuthState | null, formData: Fo
     },
   });
 
-  if (error) {
-    return { error: error.message };
-  }
+  if (error) return { error: error.message };
 
-  redirect('/login?message=Account forged successfully. Please sign in.');
+  // Email confirmation disabled -> already signed in.
+  if (data.session) redirect(safeNextPath(next));
+
+  const params = new URLSearchParams({ notice: 'check-email' });
+  if (next) params.set('next', safeNextPath(next));
+  redirect(`/login?${params.toString()}`);
 }
 
 export async function signOutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect('/login');
+  redirect('/login?notice=signed-out');
 }

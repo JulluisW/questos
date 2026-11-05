@@ -12,8 +12,11 @@
   --color-parchment: #f4ebcd;
   --color-ink: #2b1b17;
   --color-wood: #5c4033;
-  --font-heading: var(--font-sans);
-  --font-body: var(--font-body);
+  /* Fonts loaded via next/font in app/layout.tsx */
+  --font-serif: var(--font-lora), Georgia, 'Times New Roman', serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-lora), Georgia, serif;
+  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* 
