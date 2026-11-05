@@ -38,6 +38,7 @@ Next.js 16 (App Router, Server Actions, `proxy.ts`) · React 19 · Tailwind CSS 
 **Local (recommended):** requires Docker and the [Supabase CLI](https://supabase.com/docs/guides/cli).
 
 ```bash
+supabase init           # first time only: creates supabase/config.toml (commit it)
 supabase start          # boots Postgres/Auth locally
 supabase db reset       # applies supabase/migrations + supabase/seed.sql
 supabase status         # prints the API URL and anon key
