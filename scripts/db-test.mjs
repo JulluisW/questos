@@ -26,6 +26,10 @@ const GUILD = '33333333-3333-3333-3333-333333333333';
 const GUILD_CAMPAIGN = '44444444-4444-4444-4444-444444444444';
 const MERLIN_SOLO = '55555555-5555-5555-5555-555555555555';
 const ARTHUR_SOLO = '66666666-6666-6666-6666-666666666666';
+const GUINEVERE = '88888888-8888-8888-8888-888888888888'; // Round Table manager, Avalon boss
+const AVALON = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'; // Arthur is only a manager here
+const AVALON_CAMPAIGN = 'c0000000-0000-0000-0000-000000000004';
+const DEMO_USERS = [ARTHUR, MERLIN, GUINEVERE, '99999999-9999-9999-9999-999999999999', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'];
 
 const SUPABASE_SHIM = `
   CREATE ROLE anon NOLOGIN;
@@ -45,6 +49,10 @@ const SUPABASE_SHIM = `
     role TEXT,
     aud TEXT,
     is_sso_user BOOLEAN DEFAULT FALSE,
+    confirmation_token TEXT,
+    recovery_token TEXT,
+    email_change TEXT,
+    email_change_token_new TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );
@@ -160,11 +168,14 @@ test('users cannot edit someone else profile', async () => {
 // ---------------------------------------------------------------------------
 test('campaign visibility: solo is private, guild is shared with members', async () => {
   await scenario(async (as) => {
-    const arthur = await as(ARTHUR, `SELECT id FROM public.campaigns ORDER BY id`);
-    assert.deepEqual(arthur.rows.map((r) => r.id).sort(), [GUILD_CAMPAIGN, ARTHUR_SOLO].sort());
+    const arthur = (await as(ARTHUR, `SELECT id FROM public.campaigns`)).rows.map((r) => r.id);
+    assert.ok(arthur.includes(GUILD_CAMPAIGN) && arthur.includes(ARTHUR_SOLO) && arthur.includes(AVALON_CAMPAIGN));
+    assert.ok(!arthur.includes(MERLIN_SOLO), 'Arthur must not see Merlin solo campaign');
 
-    const merlin = await as(MERLIN, `SELECT id FROM public.campaigns`);
-    assert.deepEqual(merlin.rows.map((r) => r.id).sort(), [GUILD_CAMPAIGN, MERLIN_SOLO].sort());
+    const merlin = (await as(MERLIN, `SELECT id FROM public.campaigns`)).rows.map((r) => r.id);
+    assert.ok(merlin.includes(GUILD_CAMPAIGN) && merlin.includes(MERLIN_SOLO));
+    assert.ok(!merlin.includes(ARTHUR_SOLO), 'Merlin must not see Arthur solo campaign');
+    assert.ok(!merlin.includes(AVALON_CAMPAIGN), 'Merlin is not in Avalon');
 
     const outsider = await as(OUTSIDER, `SELECT id FROM public.campaigns`);
     assert.equal(outsider.rows.length, 0);
@@ -421,8 +432,89 @@ test('leaving a guild releases assigned quests; boss cannot leave', async () => 
     ]);
     assert.equal(rows[0].n, 0);
 
-    const bossLeave = await as(ARTHUR, `DELETE FROM public.guild_members WHERE user_id = $1`, [ARTHUR]);
+    const bossLeave = await as(ARTHUR, `DELETE FROM public.guild_members WHERE user_id = $1 AND guild_id = $2`, [
+      ARTHUR,
+      GUILD,
+    ]);
     assert.equal(bossLeave.count, 0);
+  });
+});
+
+test('roles are per guild: a boss elsewhere is only a manager in Avalon', async () => {
+  await scenario(async (as) => {
+    const role = await as(ARTHUR, `SELECT public.get_my_guild_role($1) AS role`, [AVALON]);
+    assert.equal(role.rows[0].role, 'manager');
+
+    const edit = await as(
+      ARTHUR,
+      `UPDATE public.quests SET priority = 'high' WHERE campaign_id = $1 AND title = 'Collect feedback after the tournament'`,
+      [AVALON_CAMPAIGN]
+    );
+    assert.equal(edit.count, 1, edit.error);
+
+    const managerDelete = await as(ARTHUR, `DELETE FROM public.campaigns WHERE id = $1`, [AVALON_CAMPAIGN]);
+    assert.equal(managerDelete.count, 0);
+    const bossDelete = await as(GUINEVERE, `DELETE FROM public.campaigns WHERE id = $1`, [AVALON_CAMPAIGN]);
+    assert.equal(bossDelete.count, 1, bossDelete.error);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Showcase seed
+// ---------------------------------------------------------------------------
+test('seed: completed_at matches status and is backdated', async () => {
+  const { rows } = await db.query(`
+    SELECT
+      count(*) FILTER (WHERE (status = 'completed') <> (completed_at IS NOT NULL))::int AS mismatched,
+      count(*) FILTER (WHERE completed_at < created_at)::int AS before_created,
+      count(*) FILTER (WHERE completed_at > NOW() - INTERVAL '7 days')::int AS this_week,
+      count(*) FILTER (WHERE completed_at < NOW() - INTERVAL '7 days')::int AS older
+    FROM public.quests`);
+  assert.equal(rows[0].mismatched, 0);
+  assert.equal(rows[0].before_created, 0);
+  assert.ok(rows[0].this_week > 0, 'dashboard "completed this week" should not be empty');
+  assert.ok(rows[0].older > 0, 'Hall of Records should have history');
+});
+
+test('seed: every campaign status and quest column is represented', async () => {
+  const campaigns = await db.query(`SELECT DISTINCT status::text AS status FROM public.campaigns ORDER BY 1`);
+  assert.deepEqual(campaigns.rows.map((r) => r.status), ['active', 'archived', 'completed']);
+  const quests = await db.query(`SELECT DISTINCT status FROM public.quests WHERE campaign_id = $1`, [GUILD_CAMPAIGN]);
+  assert.equal(quests.rows.length, 3);
+});
+
+test('seed: demo accounts can sign in (identities present, no NULL tokens)', async () => {
+  const { rows } = await db.query(
+    `SELECT u.id
+     FROM auth.users u
+     JOIN auth.identities i ON i.user_id = u.id AND i.provider = 'email'
+     WHERE u.id = ANY($1::uuid[])
+       AND u.encrypted_password = extensions.crypt('12345678', u.encrypted_password)
+       AND u.confirmation_token = '' AND u.recovery_token = ''
+       AND u.email_change = '' AND u.email_change_token_new = ''`,
+    [DEMO_USERS]
+  );
+  assert.equal(rows.length, DEMO_USERS.length);
+});
+
+test('seed: re-running resets demo data without duplicates', async () => {
+  const snapshot = `
+    SELECT
+      (SELECT count(*) FROM public.campaigns)::int AS campaigns,
+      (SELECT count(*) FROM public.quests)::int AS quests,
+      (SELECT count(*) FROM public.guild_members)::int AS members,
+      (SELECT count(*) FROM public.guild_invites)::int AS invites,
+      (SELECT count(*) FROM auth.identities)::int AS identities`;
+  const before = (await db.query(snapshot)).rows[0];
+  await scenario(async (as) => {
+    const scribble = await as(ARTHUR, `SELECT public.forge_campaign_with_quests('Visitor scribble', NULL, NULL, '[]')`);
+    assert.ok(!scribble.error, scribble.error);
+
+    await db.exec('RESET ROLE');
+    await db.exec(await readFile(path.join(root, 'supabase', 'seed.sql'), 'utf8'));
+    assert.deepEqual((await db.query(snapshot)).rows[0], before);
+    const gone = await db.query(`SELECT 1 FROM public.campaigns WHERE name = 'Visitor scribble'`);
+    assert.equal(gone.rows.length, 0);
   });
 });
 

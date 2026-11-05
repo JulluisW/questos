@@ -69,12 +69,19 @@ npm run dev                  # http://localhost:3000
 
 ### Demo accounts (seed data)
 
-| Email | Password | Role |
-| --- | --- | --- |
-| `arthur@questos.dev` | `12345678` | Boss of *Round Table Engineering* + solo campaign |
-| `merlin@questos.dev` | `12345678` | Worker in the guild + solo campaign |
+Every account uses the password `12345678`.
 
-Sign in as both (for example in two browser profiles) to see role-based access in action.
+| Email | Round Table Engineering | Avalon Creative | Solo campaigns |
+| --- | --- | --- | --- |
+| `arthur@questos.dev` | boss | manager | Marathon Preparation, Learn the Lute |
+| `guinevere@questos.dev` | manager | boss | — |
+| `merlin@questos.dev` | worker | — | Personal Alchemy Experiments |
+| `lancelot@questos.dev` | worker | — | — |
+| `gawain@questos.dev` | worker | worker | — |
+
+Start with **Arthur**: his dashboard has active, completed and archived campaigns, a busy board (*Excalibur Auth Launch*), a pending invite link and weeks of history in the Hall of Records. Then open the same board as **Merlin** in a second browser profile: as a worker he can drag and claim quests but not edit them.
+
+Dates in the seed are relative to the moment it runs, so the dashboard always looks current. Running `psql "$DB_URL" -f supabase/seed.sql` again resets the demo accounts to this state.
 
 ## Scripts
 
