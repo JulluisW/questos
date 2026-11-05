@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
 export default async function QuestBoardIndexPage() {
@@ -28,15 +27,11 @@ export default async function QuestBoardIndexPage() {
       <div className="text-center">
         <h2 className="font-serif text-2xl font-bold text-[#1c120c]">No Active Campaigns</h2>
         <p className="mt-2 text-sm text-stone-500">Your guild has no active bounties.</p>
-        <Link href={`/campaigns?new=true`}>
-          <button
-            type="button"
-            className={cn(
-              'mt-6 rounded border border-[#52372a] bg-[#3d271d] px-4 py-2 text-xs font-bold tracking-wider text-[#fbf8f3] uppercase shadow transition-all hover:bg-[#2b1b14]'
-            )}
-          >
-            Forge New Campaign
-          </button>
+        <Link
+          href="/campaigns?new=true"
+          className="mt-6 inline-block rounded border border-[#52372a] bg-[#3d271d] px-4 py-2 text-xs font-bold tracking-wider text-[#fbf8f3] uppercase shadow transition-all hover:bg-[#2b1b14]"
+        >
+          Forge New Campaign
         </Link>
       </div>
     </div>

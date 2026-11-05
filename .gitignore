@@ -44,3 +44,11 @@ next-env.d.ts
 
 repomix-output.*
 CHECKLIST.md
+
+.kilo
+
+# supabase local artifacts (CLI temp state, secrets, dumps, studio snippets)
+supabase/.temp/
+supabase/.branches/
+supabase/dumps/
+supabase/snippets/

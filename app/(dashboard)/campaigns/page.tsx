@@ -1,10 +1,9 @@
-// app/(dashboard)/board/page.tsx
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { Campaign } from '@/types';
+import { CampaignWithQuests, Quest } from '@/types';
 import { ForgeCampaignDialogTrigger } from './_components/forge-campaign-dialog-trigger';
-// import { ForgeCampaignDialogTrigger } from './_components/forge-campaign-dialog-trigger';
+import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 export default async function CampaignsPage() {
   const supabase = await createClient();
@@ -26,6 +25,8 @@ export default async function CampaignsPage() {
     )
     .order('created_at', { ascending: false });
 
+  const typedCampaigns = (campaigns ?? []) as CampaignWithQuests[];
+
   return (
     <div className="mx-auto max-w-7xl p-6">
       {/* Page Header */}
@@ -38,7 +39,7 @@ export default async function CampaignsPage() {
       </div>
 
       {/* Empty State */}
-      {!campaigns || campaigns.length === 0 ? (
+      {typedCampaigns.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50/50 p-12 text-center">
           <h3 className="font-serif text-lg font-semibold text-[#1c120c]">No Active Campaigns</h3>
           <p className="mt-1 text-sm text-stone-500">Your realm currently has no active bounties or personal quests.</p>
@@ -49,11 +50,12 @@ export default async function CampaignsPage() {
       ) : (
         /* Campaign Card Grid */
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {campaigns.map((campaign) => {
+          {typedCampaigns.map((campaign) => {
             const totalQuests = campaign.quests?.length ?? 0;
-            const completedQuests = campaign.quests?.filter((q: Campaign) => q.status === 'completed').length ?? 0;
-            const progressPercentage = totalQuests > 0 ? Math.round((completedQuests / totalQuests) * 100) : 0;
-            // const totalXp = campaign.quests?.reduce((sum, q) => sum + (q.xp_reward ?? 0), 0) ?? 0;
+            const completedQuests =
+              campaign.quests?.filter((q: Quest) => q.status === 'completed').length ?? 0;
+            const progressPercentage =
+              totalQuests > 0 ? Math.round((completedQuests / totalQuests) * 100) : 0;
 
             return (
               <div
@@ -64,13 +66,14 @@ export default async function CampaignsPage() {
                   {/* Top Metadata: Status Pill & Realm Scope */}
                   <div className="mb-3 flex items-center justify-between">
                     <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wider uppercase ${
+                      className={cn(
+                        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wider uppercase',
                         campaign.status === 'active'
                           ? 'bg-amber-100 text-amber-800'
                           : campaign.status === 'completed'
                             ? 'bg-emerald-100 text-emerald-800'
                             : 'bg-stone-100 text-stone-700'
-                      }`}
+                      )}
                     >
                       {campaign.status}
                     </span>
@@ -89,14 +92,18 @@ export default async function CampaignsPage() {
                 {/* Quests Summary & Completion Metrics */}
                 <div className="mt-6 border-t border-stone-100 pt-4">
                   <div className="mb-2 flex items-center justify-between text-xs text-stone-600">
-                    <span>
-                      Quests ({completedQuests}/{totalQuests})
-                    </span>
-                    {/* <span className="font-medium text-amber-700">{totalXp} XP</span> */}
+                    <span>Quests ({completedQuests}/{totalQuests})</span>
                   </div>
 
                   {/* Progress Bar */}
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-100">
+                  <div
+                    role="progressbar"
+                    aria-label={`Campaign progress: ${completedQuests} of ${totalQuests} quests complete`}
+                    aria-valuenow={completedQuests}
+                    aria-valuemin={0}
+                    aria-valuemax={totalQuests}
+                    className="h-1.5 w-full overflow-hidden rounded-full bg-stone-100"
+                  >
                     <div
                       className="h-full bg-amber-700 transition-all duration-300"
                       style={{ width: `${progressPercentage}%` }}
@@ -108,7 +115,7 @@ export default async function CampaignsPage() {
                     <span className="text-xs text-stone-400">{progressPercentage}% Complete</span>
                     <Link
                       href={`/board/${campaign.id}`}
-                      className="inline-flex items-center rounded-md bg-[#1c120c] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-stone-800"
+                      className="inline-flex items-center rounded border border-[#52372a] bg-[#3d271d] px-3 py-1.5 text-xs font-bold tracking-wider text-[#fbf8f3] uppercase shadow transition-all hover:bg-[#2b1b14]"
                     >
                       Open Board &rarr;
                     </Link>
