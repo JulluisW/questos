@@ -1,4 +1,4 @@
-# The Daily Quest — Architecture
+# QuestOS (The Daily Quest) — Architecture
 
 > **Living document rule (for humans and AI):** Before editing this file, read the existing `ARCHITECTURE.md` and scan the current codebase. Merge updates intelligently—preserve accurate history, note what changed, and do not blindly overwrite prior sections. Update the [Document history](#document-history) entry for each meaningful revision.
 
@@ -6,238 +6,153 @@
 
 ## The Vision
 
-**The Daily Quest** is an AI-ready **gamified accountability coach** dressed as a medieval tavern notice board. Adventurers (users) draft quests, organize them on a Kanban board, and earn XP when they complete work—turning daily habits into a lightweight RPG loop.
+**QuestOS** (formerly *The Daily Quest*) is a gamified planning tool dressed as a medieval tavern notice board. A user forges a **campaign** around a goal, the **AI Oracle** breaks it into **quests**, and the quests move across a Kanban board until they land in the Hall of Records.
 
-The product has evolved from a **browser-only prototype** (local persistence) into a **cloud-connected MVP** with **Supabase Authentication**, per-user quest storage, and client-side gamification—positioned for a future **Phase 3** where an AI coach (Vercel AI SDK) can reason over quests and campaigns.
+The MVP is **solo-first**: everything works for one adventurer. **Guilds** are a thin layer on top that let small teams share campaigns with three roles (boss, manager, worker).
+
+The XP/level system from the prototype is **intentionally removed** for the MVP (see [Evolution](#evolution)) and is on the roadmap as a value derived from completed quests.
 
 ---
 
 ## Tech Stack
 
 | Layer | Technology | Role |
-|--------|------------|------|
-| Framework | **Next.js 16** (App Router) | `app/page.tsx` as the single routed surface; client components for interactivity |
-| UI | **React 19**, **Tailwind CSS v4** | Tavern-themed layout, typography (Cinzel + Merriweather via `next/font`) |
-| Drag & drop | **@dnd-kit** (`core`, `sortable`, `utilities`) | Kanban columns, sortable cards, drag overlay |
-| Backend / auth | **Supabase** (`@supabase/supabase-js`) | Postgres `quests` table, email/password auth, session in browser |
-| Language | **TypeScript** | Shared `Quest` / `QuestStatus` types in `types/quest.ts` |
-
-**Environment:** `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local` (see `lib/supabase/client.ts`).
-
-**Note:** `@supabase/ssr` is listed in `package.json` but not wired yet—the app uses the browser client only.
+| --- | --- | --- |
+| Framework | **Next.js 16** (App Router, Server Actions, `proxy.ts`) | Server Components fetch data; Server Actions mutate it |
+| UI | **React 19**, **Tailwind CSS v4**, `class-variance-authority` | Parchment theme, Lora + Inter via `next/font` |
+| Drag & drop | **@dnd-kit/core** | Pointer + keyboard dragging between columns |
+| Backend | **Supabase** (`@supabase/ssr`) | Auth (cookie sessions), Postgres, RLS, RPC |
+| AI | **Vercel AI SDK v7** + `@ai-sdk/openai` | `generateText` + `Output.object` with a Zod schema; Ollama locally, OpenAI optionally |
+| Validation | **Zod v4** | Form input, AI output |
+| Tests | **PGlite** + `node:test` | RLS/trigger tests on an in-memory Postgres |
 
 ---
 
-## Application State & Data Flow
-
-### Separation of concerns: “Brain” vs UI
-
-The **custom hook** [`hooks/useQuests.ts`](hooks/useQuests.ts) is the application brain. It owns:
-
-- Quest list state, form drafts (`draftText`, `campaign`, `isMilestone`)
-- Gamification state (`xp` → derived `level`, `xpProgress`)
-- Supabase CRUD: fetch on mount, insert on add, delete on remove
-- Optimistic drag status updates via `handleQuestDrag`
-
-**Presentation** stays thin:
-
-| UI module | Responsibility |
-|-----------|----------------|
-| [`app/page.tsx`](app/page.tsx) | Auth gate (`useAuth`), composes board vs `AuthForm` |
-| [`components/AddQuestForm.tsx`](components/AddQuestForm.tsx) | Controlled inputs; calls `handleAddQuest` |
-| [`components/KanbanBoard.tsx`](components/KanbanBoard.tsx) | `@dnd-kit` context; delegates drag + DB persist |
-| [`components/BoardHeader.tsx`](components/BoardHeader.tsx) | Level bar, sign-out |
-| [`lib/quests/drag.ts`](lib/quests/drag.ts) | Pure helpers: `resolveTargetStatus`, `applyQuestDrag` |
-| [`lib/quests/normalize.ts`](lib/quests/normalize.ts) | Maps DB/API shapes → `Quest` |
-
-[`hooks/useAuth.ts`](hooks/useAuth.ts) mirrors the same pattern for auth: session bootstrap + `onAuthStateChange`, consumed only by the page shell.
-
-### End-to-end flow (authenticated user)
+## Request & Data Flow
 
 ```mermaid
-flowchart TB
-  subgraph client [Browser]
-    Page[app/page.tsx]
-    Auth[useAuth]
-    Quests[useQuests]
-    Kanban[KanbanBoard]
-    SB[(supabase client)]
-  end
-  subgraph supa [Supabase]
-    AuthSvc[Auth]
-    DB[(quests + RLS)]
-  end
-
-  Page --> Auth
-  Auth -->|no user| AuthForm[AuthForm]
-  Auth -->|user| Quests
-  Quests -->|select/insert/delete/update| SB
-  SB --> AuthSvc
-  SB --> DB
-  Quests --> Kanban
-  Kanban -->|onQuestDrag| Quests
-  Kanban -->|onQuestStatusPersist| SB
+flowchart LR
+  Browser -->|every request| Proxy[proxy.ts\nupdateSession + getClaims]
+  Proxy -->|no session| Login[/login?next=.../]
+  Proxy --> RSC[Server Components\napp/(dashboard)/*]
+  RSC -->|select via RLS| PG[(Postgres + RLS)]
+  Browser -->|form / event| SA[Server Actions\nactions/*]
+  SA -->|zod validate| SA
+  SA -->|insert/update/rpc as user| PG
+  SA -->|consultOracle| AI[lib/ai/oracle.ts]
+  AI -->|generateText + Output.object| LLM[(Ollama / OpenAI)]
+  SA -->|revalidatePath| RSC
 ```
 
-1. **Mount:** `useAuth` resolves session; unauthenticated users see `AuthForm`.
-2. **Load quests:** `useQuests` runs `select *` ordered by `created_at`; rows are normalized (`is_milestone` → `isMilestone`).
-3. **Add quest:** Optimistic append → `insert` → rollback filter on error.
-4. **Drag quest:** `handleQuestDrag` updates local state immediately; `KanbanBoard` calls `updateQuestStatusInDB` when status actually changes (fire-and-forget).
-5. **Delete:** Optimistic remove → `delete` → restore quest on error.
+1. **`proxy.ts`** refreshes the Supabase session cookie and redirects signed-out users to `/login?next=<path>` (the path is validated by `safeNextPath`, so open redirects are blocked).
+2. **Server Components** query Supabase with the user's cookie client. No ownership filters are added in code; RLS decides what each user sees.
+3. **Server Actions** (`actions/*`) re-check the session, validate input with Zod (`lib/validation.ts`), write with the user's client, map database errors to friendly text (`lib/db-errors.ts`) and call `revalidatePath`.
+4. **Client components** stay small: dialogs use `useActionState`, and the board keeps an optimistic copy of quests that resyncs whenever the server sends fresh props.
 
-### Optimistic UI
+### Quest board
 
-The MVP applies **optimistic updates** for perceived speed; the server is the source of truth for quests, with rollback on failure:
+`app/(dashboard)/board/_components/quest-board.tsx` owns the board state:
 
-| Action | Optimistic behavior | Persistence | Rollback |
-|--------|---------------------|-------------|----------|
-| Add quest | Append to `quests` immediately | `insert` into `quests` | Remove new row if `error` |
-| Delete quest | Remove from `quests` | `delete` by `id` | Re-append `deletedQuest` if `error` |
-| Drag / status change | `applyQuestDrag` updates `quests` + may award XP | `update({ status })` via `updateQuestStatusInDB` | *Not implemented*—status is not reverted on failed update |
+| Concern | Approach |
+| --- | --- |
+| Drag | `useDraggable` cards, `useDroppable` columns, `resolveTargetStatus` maps the drop target |
+| Optimistic update | Card moves immediately; on action error it is reverted and an inline notice appears |
+| Server sync | "Store previous props" pattern: new `initialQuests` from `revalidatePath` replace local state |
+| Keyboard | The grip button is the drag activator; Arrow Left/Right jump between columns (custom `KeyboardCoordinateGetter`) |
+| Permissions | `can_manage_campaign` RPC → edit/delete/post controls; guild workers get Claim/Release |
 
-Loading UX: `isMounted` gates the Kanban behind [`KanbanSkeleton`](components/KanbanSkeleton.tsx) until the first fetch completes.
+### AI Oracle
 
-### Legacy prototype (Phase 1)
+`lib/ai/oracle.ts` is the single entry point, shared by "Forge with Oracle" and "Ask the Oracle":
 
-[`lib/quests/storage.ts`](lib/quests/storage.ts) (`loadBoardState` / `saveBoardState`, key `daily_quests_v1`) implemented **localStorage** persistence with default seed quests. **Nothing in the active app imports this module anymore**—it remains as a reference to the pre-Supabase prototype. Gamification and quests now live in React state + Supabase for quests only.
+1. Checks `isAIEnabled()`. In production a provider must be configured explicitly.
+2. Enforces a per-user hourly limit by counting rows in `ai_generations` (RLS scopes the count to the caller), then appends a row.
+3. Calls `generateText({ output: Output.object({ schema }) })`. Campaign data is wrapped in tags and the system prompt treats it as data, which blunts prompt injection.
+4. Inserts the quests with the user's client, so RLS still applies.
 
----
-
-## Gamification Engine
-
-Constants live in [`lib/quests/constants.ts`](lib/quests/constants.ts):
-
-| Constant | Value |
-|----------|-------|
-| `XP_PER_QUEST` | **50** |
-| `XP_PER_MILESTONE` | **250** |
-
-### When XP is awarded
-
-XP is granted **only** when a quest is dragged into the **`completed`** column and its **previous** status was not `completed` (see `shouldAwardXp` in `useQuests`).
-
-```ts
-const xpGain = activeQuest.isMilestone ? XP_PER_MILESTONE : XP_PER_QUEST;
-setXp((prev) => prev + xpGain);
-```
-
-- Standard quest (`isMilestone: false`): **+50 XP**
-- Milestone / “Epic Quest” (`isMilestone: true`): **+250 XP**
-- Moving out of `completed` or between non-completed columns: **no XP change**
-- Re-dragging an already completed quest: **no duplicate XP** (guarded by prior status check)
-
-### Level and progress bar
-
-Computed in `useQuests` (1-based level):
-
-| Derived value | Formula | UI |
-|---------------|---------|-----|
-| `level` | `Math.floor(xp / 100) + 1` | “Level {n} Architect” in `BoardHeader` |
-| `xpProgress` | `xp % 100` | Progress bar width and “{xpProgress} / 100 XP” |
-
-Examples: `xp = 0` → Level **1**, bar at **0**; `xp = 99` → Level **1**, bar at **99**; `xp = 100` → Level **2**, bar at **0**.
-
-Milestone quests are surfaced in [`QuestItem`](components/QuestItem.tsx) (gold border, ★, “Sub-Boss” label).
-
-### Current limitation (important)
-
-**XP is held only in React state**—it is **not** written to Supabase or localStorage in the MVP. A full page refresh resets XP to `0` while completed quest **status** remains in the database. Persisting XP (or deriving it from completed rows) is a natural follow-up.
+Ollama is called through `ollama.chat()` (Chat Completions); the default OpenAI provider call uses the Responses API, which Ollama does not implement. If the Oracle fails during "Forge with Oracle", the campaign is still created and the board shows a retry banner.
 
 ---
 
 ## Database Schema
 
-The app expects a Postgres table **`quests`** (managed in Supabase). The TypeScript domain model [`types/quest.ts`](types/quest.ts) maps to columns as follows:
+Migrations live in `supabase/migrations` and are **append-only**.
 
-| Column (DB) | App field | Type / notes |
-|-------------|-----------|--------------|
-| `id` | `id` | `text` — client generates `"q_" + Date.now()` on insert |
-| `text` | `text` | Quest description |
-| `campaign` | `campaign` | Grouping label; defaults to `"General Campaign"` if empty on create |
-| `status` | `status` | `"pending"` \| `"in-progress"` \| `"completed"` |
-| `is_milestone` | `isMilestone` | `boolean` — epic / boss quests |
-| `created_at` | *(not on Quest type)* | Used for `order("created_at", { ascending: true })` on fetch |
-| `user_id` | *(not sent from client on insert)* | Should tie each row to `auth.uid()` — typically set via **column default** (`auth.uid()`) and/or **RLS**; required for multi-tenant isolation |
+| Table | Purpose | Notes |
+| --- | --- | --- |
+| `profiles` | One row per auth user | Created by the `handle_new_user` trigger; usernames de-duplicated with a suffix |
+| `guilds` | Teams | Created only through `create_guild()` |
+| `guild_members` | Membership + `guild_role` | One boss per guild (partial unique index); only `role` is updatable |
+| `guild_invites` | Shareable join tokens | 7-day expiry, revocable |
+| `campaigns` | Goal containers | `guild_id IS NULL` = solo; `status`: active/completed/archived |
+| `quests` | Work items | `status`, `priority`, `is_milestone`, `assignee_id`; `completed_at` set by trigger |
+| `ai_generations` | Oracle usage ledger | Append-only; drives rate limiting |
 
-**Client insert payload** (see `handleAddQuest`): `id`, `text`, `campaign`, `status`, `is_milestone` only. **`user_id` is assumed to be filled by the database** from the authenticated session.
+### Authorization (RLS)
 
-**Status updates:** `updateQuestStatusInDB(id, newStatus)` → `.update({ status }).eq("id", id)`.
+Helper functions are `SECURITY DEFINER` with a pinned `search_path`, which avoids policy recursion (the 42P17 issue fixed earlier):
 
-There is **no SQL migration file in this repo**; treat the table above as the contract between app and Supabase project settings.
+- `get_my_guild_ids()`, `get_my_guild_role(guild)`, `can_manage_guild(guild)`
+- `can_access_campaign(campaign)`: solo owner or guild member
+- `can_manage_campaign(campaign)`: solo owner or guild boss/manager
 
----
+| Table | Select | Insert | Update | Delete |
+| --- | --- | --- | --- | --- |
+| campaigns | owner / members | owner (solo) or boss/manager | owner / boss/manager (name, goal, status only) | owner / boss |
+| quests | campaign access | `can_manage_campaign` | campaign access + **worker guard trigger** | `can_manage_campaign` |
+| guild_members | same guild | (RPC only) | boss changes role manager↔worker | boss removes, members leave (never the boss) |
+| guild_invites | boss/manager | boss/manager | revoke only | — |
 
-## Authentication & Security
+Triggers: `guard_quest_update` (workers may only change status or claim/release), `validate_quest_assignee` (the assignee must belong to the campaign's audience), `release_quests_on_member_leave`, `sync_quest_completed_at`, `touch_updated_at`.
 
-### Client-side auth guard
+### Testing
 
-There is **no Next.js middleware** route protection. The guard is **entirely client-side** in [`app/page.tsx`](app/page.tsx):
-
-```tsx
-const user = useAuth();
-if (!user) return <AuthForm />;
-return <TavernBoard />;
-```
-
-[`useAuth`](hooks/useAuth.ts):
-
-1. Calls `supabase.auth.getSession()` on mount.
-2. Subscribes to `supabase.auth.onAuthStateChange` for login/logout.
-3. Returns `User | null` to the page.
-
-[`AuthForm`](components/AuthForm.tsx) supports **sign in** and **sign up** via `signInWithPassword` / `signUp`. [`BoardHeader`](components/BoardHeader.tsx) exposes **Sign Out** via `supabase.auth.signOut()`.
-
-The Supabase JS client attaches the user’s JWT to subsequent `from("quests")` calls automatically.
-
-### Row Level Security (RLS)
-
-RLS policies are **configured in Supabase** (not in this repository). The application **assumes** policies along these lines:
-
-| Operation | Intended policy |
-|-----------|-----------------|
-| `SELECT` | Rows where `user_id = auth.uid()` |
-| `INSERT` | Allowed for authenticated users; `user_id` matches `auth.uid()` (default or check) |
-| `UPDATE` / `DELETE` | Only rows owned by `auth.uid()` |
-
-With RLS enabled and no valid session, quest queries fail or return empty—complementing the UI auth gate. **Do not rely on the UI alone** for security; RLS is the enforcement layer on the database.
-
-**Secrets:** Only the **anon** key is used in the browser (`NEXT_PUBLIC_*`). Service role keys must never ship to the client.
+`npm run test:db` boots PGlite, recreates the parts of Supabase the schema needs (`auth.users`, `auth.uid()`, `anon`/`authenticated` roles, default grants), applies every migration plus the seed, and impersonates users the way PostgREST does (`SET ROLE authenticated` + `request.jwt.claim.sub`). Each scenario runs in a rolled-back transaction. Run against only the original four migrations, the suite fails on the cross-guild injection, ownership-change and worker-edit cases, which confirms it detects those regressions.
 
 ---
 
-## Project layout (reference)
+## Project layout
 
 ```
-app/                 # layout, globals, page (auth + board shell)
-components/          # Kanban, forms, auth, header
-hooks/               # useQuests, useAuth
-lib/
-  quests/            # constants, drag, normalize, legacy storage
-  supabase/          # browser client
-types/               # Quest, QuestStatus
+actions/            auth, campaigns, quests, oracle, guilds (Server Actions)
+app/(auth)/         login, signup
+app/(dashboard)/    layout (sidebar), dashboard, campaigns, board, team, join/[token], records
+components/ui/      Button, ParchmentDialog, SubmitButton, ConfirmDialog, Notice, FormField…
+components/         app-shell nav, campaign card + forge dialog
+lib/ai/             models.ts (provider switch), schemas.ts, oracle.ts
+lib/supabase/       server.ts, client.ts, proxy.ts (typed with Database)
+lib/                queries.ts, validation.ts, db-errors.ts, utils.ts, quests/
+types/              database.types.ts (generated format) + index.ts aliases
+supabase/           migrations/, seed.sql
+scripts/            db-test.mjs
 ```
 
 ---
 
-## Future Roadmap
+## Evolution
 
-### Phase 3: Vercel AI SDK Integration
+| Phase | What it was | What happened to it |
+| --- | --- | --- |
+| 1. Prototype | Browser-only board, `localStorage` (`daily_quests_v1`), client-side XP (+50 / +250 milestone, level = ⌊xp/100⌋+1) | Storage module removed; XP removed for the MVP |
+| 2. Cloud MVP | Single `app/page.tsx`, `useQuests`/`useAuth` hooks, browser Supabase client, client-side auth gate, RLS configured outside the repo | Replaced by SSR auth (`@supabase/ssr` + `proxy.ts`), Server Actions and versioned migrations |
+| 3. QuestOS (Days 4–7) | Auth routes, campaigns, guild schema, AI decomposition, RLS recursion fix | Kept; hardened in phase 4 |
+| 4. MVP hardening | This document | Role-aware RLS, invites, Oracle service, dashboard, tests |
 
-_Placeholder — not started._
+---
 
-Planned direction: an accountability **coach** that can read quest/campaign context, suggest next actions, and eventually participate in the loop (e.g. breaking milestones into sub-quests). Integration point: server-side or streamed routes using the **Vercel AI SDK**, with quest data fetched under the same Supabase auth/RLS model.
+## Roadmap
 
-**Related follow-ups before or with Phase 3:**
-
-- Persist **XP / level** (profile table or derived from `quests` where `status = 'completed'`)
-- Revert optimistic status updates on failed `update`
-- Optional: wire `@supabase/ssr` + middleware for server-rendered auth
-- Remove or archive unused `lib/quests/storage.ts` when history is fully captured here
+- XP and levels **derived** from completed quests (trigger or view), never written by clients
+- Email invites, OAuth sign-in, password reset
+- Persisted quest ordering within a column; filter, sort and search
+- Production AI provider decision (OpenAI or Anthropic) before deploying the Oracle publicly
+- pgTAP or the PGlite suite in CI
 
 ---
 
 ## Document history
 
 | Date | Summary |
-|------|---------|
+| --- | --- |
 | 2026-05-29 | Initial living architecture doc: Phase 1 localStorage → Phase 2 Supabase MVP, gamification math, hook-based data flow, auth guard, schema contract, Phase 3 placeholder. |
+| 2026-11-05 | Rewritten for QuestOS MVP: SSR auth + proxy, Server Actions, role-aware RLS (boss/manager/worker), guild invites, AI Oracle service with rate limiting, XP removed, PGlite RLS test suite. Phases 1–2 summarised under *Evolution*. |
