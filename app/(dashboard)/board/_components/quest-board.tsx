@@ -19,6 +19,7 @@ import { resolveTargetStatus } from '@/lib/quests/drag';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Notice } from '@/components/ui/notice';
+import { Portal } from '@/components/ui/portal';
 import type { BoardMember, Quest, QuestStatus } from '@/types';
 import { BoardColumn } from './board-column';
 import { DraggableQuestCard, QuestCardView } from './quest-card';
@@ -58,7 +59,9 @@ const columnKeyboardCoordinates: KeyboardCoordinateGetter = (event, { context, c
     .sort((a, b) => a - b);
 
   const target =
-    event.code === 'ArrowRight' ? columns.find((c) => c > center + 1) : [...columns].reverse().find((c) => c < center - 1);
+    event.code === 'ArrowRight'
+      ? columns.find((c) => c > center + 1)
+      : [...columns].reverse().find((c) => c < center - 1);
   if (target === undefined) return currentCoordinates;
 
   return { x: currentCoordinates.x + (target - center), y: currentCoordinates.y };
@@ -141,7 +144,11 @@ export function QuestBoard({
       setQuests((prev) =>
         prev.map((q) =>
           q.id === draggedId
-            ? { ...q, status: targetStatus, completed_at: targetStatus === 'completed' ? new Date().toISOString() : null }
+            ? {
+                ...q,
+                status: targetStatus,
+                completed_at: targetStatus === 'completed' ? new Date().toISOString() : null,
+              }
             : q
         )
       );
@@ -200,7 +207,13 @@ export function QuestBoard({
         </Notice>
       )}
 
-      <DndContext id={dndId} sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveId(null)}>
+      <DndContext
+        id={dndId}
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={() => setActiveId(null)}
+      >
         <div className="-mx-4 overflow-x-auto px-4 pb-4 md:mx-0 md:px-0">
           <div className="grid min-w-[52rem] grid-cols-3 gap-4 md:min-w-0 md:gap-6">
             {COLUMN_IDS.map((status) => {
@@ -230,16 +243,19 @@ export function QuestBoard({
           </div>
         </div>
 
-        <DragOverlay>
-          {activeQuest ? (
-            <QuestCardView
-              quest={activeQuest}
-              assignee={activeQuest.assignee_id ? memberById.get(activeQuest.assignee_id) : undefined}
-              overlay
-              {...cardProps}
-            />
-          ) : null}
-        </DragOverlay>
+        {/* Portalled so the dragged card floats above the sticky header too. */}
+        <Portal>
+          <DragOverlay>
+            {activeQuest ? (
+              <QuestCardView
+                quest={activeQuest}
+                assignee={activeQuest.assignee_id ? memberById.get(activeQuest.assignee_id) : undefined}
+                overlay
+                {...cardProps}
+              />
+            ) : null}
+          </DragOverlay>
+        </Portal>
       </DndContext>
 
       <QuestDialog
