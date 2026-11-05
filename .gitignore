@@ -1,6 +1,6 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
+# --- Dependencies -----------------------------------------------------------
 /node_modules
 /.pnp
 .pnp.*
@@ -10,46 +10,40 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
-# next.js
+# --- Build output -----------------------------------------------------------
 /.next/
 /out/
-
-# production
 /build
+/coverage
+*.tsbuildinfo
+next-env.d.ts
+.vercel
 
-# misc
-.DS_Store
+# --- Environment & secrets --------------------------------------------------
+# Every .env file stays local; only the template is committed.
+.env*
+!.env.example
 *.pem
 
-# debug
+# --- Supabase local state ---------------------------------------------------
+# CLI temp files, branch metadata, database dumps and Studio snippets.
+# Migrations and seed.sql are committed (add config.toml after `supabase init`).
+supabase/.temp/
+supabase/.branches/
+supabase/dumps/
+supabase/snippets/
+
+# --- Logs -------------------------------------------------------------------
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-!.env.example
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
+# --- OS & editor ------------------------------------------------------------
+.DS_Store
 .bashrc
 
+# --- AI tooling & personal notes --------------------------------------------
+.kilo
 repomix-output.*
 CHECKLIST.md
-
-.kilo
-
-# supabase local artifacts (CLI temp state, secrets, dumps, studio snippets)
-supabase/.temp/
-supabase/.branches/
-supabase/dumps/
-supabase/snippets/
