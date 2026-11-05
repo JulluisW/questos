@@ -89,9 +89,15 @@ export default async function QuestBoardPage({ params, searchParams }: PageProps
             </span>
           </div>
           <h1 className="font-serif text-3xl font-medium tracking-tight text-[#1c120c] md:text-4xl">{campaign.name}</h1>
-          {campaign.ultimate_goal && <p className="mt-1.5 max-w-2xl text-sm text-stone-600">{campaign.ultimate_goal}</p>}
+          {campaign.ultimate_goal && (
+            <p className="mt-1.5 max-w-2xl text-sm text-stone-600">{campaign.ultimate_goal}</p>
+          )}
           <div className="mt-3 flex max-w-md items-center gap-3">
-            <ProgressBar value={progress} label={`${completed} of ${total} quests complete`} className="h-2.5 shadow-inner" />
+            <ProgressBar
+              value={progress}
+              label={`${completed} of ${total} quests complete`}
+              className="h-2.5 shadow-inner"
+            />
             <span className="shrink-0 text-xs text-stone-500">
               {completed}/{total} · {progress}%
             </span>
@@ -99,7 +105,12 @@ export default async function QuestBoardPage({ params, searchParams }: PageProps
         </div>
 
         {canManage && (
-          <CampaignActions campaignId={campaign.id} campaignName={campaign.name} status={status} canDelete={canDelete} />
+          <CampaignActions
+            campaignId={campaign.id}
+            campaignName={campaign.name}
+            status={status}
+            canDelete={canDelete}
+          />
         )}
       </header>
 
