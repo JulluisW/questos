@@ -41,12 +41,15 @@ and installed dependencies before adding machinery.
 
 ## Conventions
 
+- Application code lives in `src/`; config, `supabase/`, `scripts/` and
+  `public/` stay at the root.
 - Authorization lives in Postgres RLS, policies and triggers, never in the UI.
   Do not use a service-role key in a request path.
-- Reads go in `data/` (server-only, return a `Result`); writes go in Server
-  Actions in `actions/`, validated with Zod from `lib/validation.ts`.
+- Reads go in `src/data/` (server-only, return a `Result`); writes go in
+  Server Actions in `src/actions/`, validated with Zod from
+  `src/lib/validation.ts`.
 - Never send raw database errors to the browser; map them with
-  `lib/db-errors.ts`.
+  `src/lib/db-errors.ts`.
 - Migrations in `supabase/migrations/` are append-only. Add a `test:db` case for
   every new policy or trigger.
 - Prettier (`.prettierrc`) and ESLint (`eslint-config-next`) define formatting.

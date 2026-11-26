@@ -97,12 +97,15 @@ Dates in the seed are relative to the moment it runs, so the dashboard always lo
 ## Project structure
 
 ```
-actions/            Server Actions (auth, campaigns, quests, oracle, guilds)
-app/(auth)/         login, signup
-app/(dashboard)/    dashboard, campaigns, board/[campaignId], team, join/[token], records
-components/ui/      shared primitives (Button, ParchmentDialog, SubmitButton, Notice…)
-lib/ai/             provider switch, Zod schemas, Oracle service
-lib/supabase/       typed server/browser clients + session proxy
+src/
+  actions/          Server Actions (auth, campaigns, quests, oracle, guilds)
+  app/(auth)/       login, signup
+  app/(dashboard)/  dashboard, campaigns, board/[campaignId], team, join/[token], records
+  components/ui/    shared primitives (Button, ParchmentDialog, SubmitButton, Notice…)
+  data/             server-only reads that return a Result (dashboard sections)
+  lib/ai/           provider switch, Zod schemas, Oracle service
+  lib/supabase/     typed server/browser clients + session proxy
+  proxy.ts          session refresh and signed-out redirects
 supabase/           append-only migrations and seed
 scripts/            database test suite
 ```

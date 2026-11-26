@@ -47,6 +47,7 @@ yarn-error.log*
 .kilo
 repomix-output.*
 CHECKLIST.md
+docs/
 
 # AI Blueprint local workflow files
 .agents/

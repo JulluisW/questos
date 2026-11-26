@@ -39,19 +39,19 @@ flowchart LR
   Browser -->|form / event| SA[Server Actions\nactions/*]
   SA -->|zod validate| SA
   SA -->|insert/update/rpc as user| PG
-  SA -->|consultOracle| AI[lib/ai/oracle.ts]
+  SA -->|consultOracle| AI[src/lib/ai/oracle.ts]
   AI -->|generateText + Output.object| LLM[(Ollama / OpenAI)]
   SA -->|revalidatePath| RSC
 ```
 
-1. **`proxy.ts`** refreshes the Supabase session cookie and redirects signed-out users to `/login?next=<path>` (the path is validated by `safeNextPath`, so open redirects are blocked).
+1. **`src/proxy.ts`** refreshes the Supabase session cookie and redirects signed-out users to `/login?next=<path>` (the path is validated by `safeNextPath`, so open redirects are blocked).
 2. **Server Components** query Supabase with the user's cookie client. No ownership filters are added in code; RLS decides what each user sees.
-3. **Server Actions** (`actions/*`) re-check the session, validate input with Zod (`lib/validation.ts`), write with the user's client, map database errors to friendly text (`lib/db-errors.ts`) and call `revalidatePath`.
+3. **Server Actions** (`src/actions/*`) re-check the session, validate input with Zod (`src/lib/validation.ts`), write with the user's client, map database errors to friendly text (`lib/db-errors.ts`) and call `revalidatePath`.
 4. **Client components** stay small: dialogs use `useActionState`, and the board keeps an optimistic copy of quests that resyncs whenever the server sends fresh props.
 
 ### Quest board
 
-`app/(dashboard)/board/_components/quest-board.tsx` owns the board state:
+`src/app/(dashboard)/board/_components/quest-board.tsx` owns the board state:
 
 | Concern | Approach |
 | --- | --- |
@@ -63,7 +63,7 @@ flowchart LR
 
 ### AI Oracle
 
-`lib/ai/oracle.ts` is the single entry point, shared by "Forge with Oracle" and "Ask the Oracle":
+`src/lib/ai/oracle.ts` is the single entry point, shared by "Forge with Oracle" and "Ask the Oracle":
 
 1. Checks `isAIEnabled()`. In production a provider must be configured explicitly.
 2. Enforces a per-user hourly limit by counting rows in `ai_generations` (RLS scopes the count to the caller), then appends a row.
@@ -114,15 +114,18 @@ Triggers: `guard_quest_update` (workers may only change status or claim/release)
 ## Project layout
 
 ```
-actions/            auth, campaigns, quests, oracle, guilds (Server Actions)
-app/(auth)/         login, signup
-app/(dashboard)/    layout (sidebar), dashboard, campaigns, board, team, join/[token], records
-components/ui/      Button, ParchmentDialog, SubmitButton, ConfirmDialog, Notice, FormField…
-components/         app-shell nav, campaign card + forge dialog
-lib/ai/             models.ts (provider switch), schemas.ts, oracle.ts
-lib/supabase/       server.ts, client.ts, proxy.ts (typed with Database)
-lib/                queries.ts, validation.ts, db-errors.ts, utils.ts, quests/
-types/              database.types.ts (generated format) + index.ts aliases
+src/
+  actions/          auth, campaigns, quests, oracle, guilds (Server Actions)
+  app/(auth)/       login, signup
+  app/(dashboard)/  layout (sidebar), dashboard, campaigns, board, team, join/[token], records
+  components/ui/    Button, ParchmentDialog, SubmitButton, ConfirmDialog, Notice, FormField…
+  components/       app-shell nav, campaign card + forge dialog
+  data/             server-only reads returning Result: auth, campaigns, quests, guilds
+  lib/ai/           models.ts (provider switch), schemas.ts, oracle.ts
+  lib/supabase/     server.ts, client.ts, proxy.ts (typed with Database)
+  lib/              queries.ts, validation.ts, db-errors.ts, utils.ts, quests/
+  types/            database.types.ts (generated format) + index.ts aliases
+  proxy.ts          session refresh and signed-out redirects
 supabase/           migrations/, seed.sql
 scripts/            db-test.mjs
 ```
@@ -156,3 +159,4 @@ scripts/            db-test.mjs
 | --- | --- |
 | 2026-05-29 | Initial living architecture doc: Phase 1 localStorage → Phase 2 Supabase MVP, gamification math, hook-based data flow, auth guard, schema contract, Phase 3 placeholder. |
 | 2026-11-05 | Rewritten for QuestOS MVP: SSR auth + proxy, Server Actions, role-aware RLS (boss/manager/worker), guild invites, AI Oracle service with rate limiting, XP removed, PGlite RLS test suite. Phases 1–2 summarised under *Evolution*. |
+| 2026-11-26 | Application code moved under `src/` (app, actions, components, data, lib, types, proxy.ts); config, `supabase/`, `scripts/` and `public/` stay at the root. Added the `data/` read layer to the project layout. |
