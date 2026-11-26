@@ -1,36 +1,114 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# QuestOS
 
-## Getting Started
+**Turn a goal into a campaign, let the AI Oracle break it into quests, and run them on a parchment Kanban board.**
 
-First, run the development server:
+QuestOS is a medieval-themed task manager built with Next.js 16, Supabase and the Vercel AI SDK. It works solo out of the box; guilds let small teams share campaigns with simple roles.
+
+## Features
+
+- **Campaigns**: forge a campaign with an ultimate goal; mark it completed or archive it.
+- **AI Oracle**: "Forge with Oracle" (or "Ask the Oracle" on any board) turns a directive into 3–8 structured quests using a Zod schema. It runs on local Ollama by default and switches to OpenAI with one env var.
+- **Quest board**: drag-and-drop Kanban (pointer or keyboard) with optimistic updates and rollback; create, edit, delete and assign quests; milestones and priorities.
+- **Command Center**: active campaigns with progress, your open quests, and recent completions.
+- **Guilds**: found a guild, share an invite link, and manage roles. Bosses and managers plan, workers move and claim quests.
+- **Hall of Records**: every completed quest, chronicled.
+
+## Security model
+
+All authorization lives in Postgres row-level security, so the UI is never trusted:
+
+| Who | Can |
+| --- | --- |
+| Solo campaign owner | everything on their own campaign |
+| Guild boss | everything in the guild, delete campaigns, change roles, remove members |
+| Guild manager | create/edit campaigns and quests, create invite links |
+| Guild worker | view guild campaigns, move quest status, claim/release quests |
+| Anyone else | nothing |
+
+Ownership columns (`created_by`, `guild_id`, `campaign_id`) are immutable through column-level grants, `completed_at` is derived by trigger, and AI usage is rate-limited per user through an append-only ledger. [`scripts/db-test.mjs`](scripts/db-test.mjs) tests these rules against an in-memory Postgres.
+
+## Tech stack
+
+Next.js 16 (App Router, Server Actions, `proxy.ts`) · React 19 · Tailwind CSS v4 · Supabase (Auth, Postgres, RLS) · Vercel AI SDK v7 · Zod v4 · dnd-kit · PGlite (DB tests)
+
+## Getting started
+
+### 1. Database
+
+**Local (recommended):** requires Docker and the [Supabase CLI](https://supabase.com/docs/guides/cli).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+supabase init           # first time only: creates supabase/config.toml (commit it)
+supabase start          # boots Postgres/Auth locally
+supabase db reset       # applies supabase/migrations + supabase/seed.sql
+supabase status         # prints the API URL and anon key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Hosted:** link your project and push the migrations:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 2. AI Oracle (optional)
 
-## Learn More
+```bash
+ollama pull llama3.2
+ollama serve            # exposes http://localhost:11434
+```
 
-To learn more about Next.js, take a look at the following resources:
+Or set `OPENAI_API_KEY` to use OpenAI instead. Without any provider in production, the Oracle buttons are disabled.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 3. App
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+cp .env.example .env.local   # fill in the Supabase URL + anon key
+npm install
+npm run dev                  # http://localhost:3000
+```
 
-## Deploy on Vercel
+### Demo accounts (seed data)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Every account uses the password `12345678`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Email | Round Table Engineering | Avalon Creative | Solo campaigns |
+| --- | --- | --- | --- |
+| `arthur@questos.dev` | boss | manager | Marathon Preparation, Learn the Lute |
+| `guinevere@questos.dev` | manager | boss | — |
+| `merlin@questos.dev` | worker | — | Personal Alchemy Experiments |
+| `lancelot@questos.dev` | worker | — | — |
+| `gawain@questos.dev` | worker | worker | — |
+
+Start with **Arthur**: his dashboard has active, completed and archived campaigns, a busy board (*Excalibur Auth Launch*), a pending invite link and weeks of history in the Hall of Records. Then open the same board as **Merlin** in a second browser profile: as a worker he can drag and claim quests but not edit them.
+
+Dates in the seed are relative to the moment it runs, so the dashboard always looks current. Running `psql "$DB_URL" -f supabase/seed.sql` again resets the demo accounts to this state.
+
+## Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Development server |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript, no emit |
+| `npm run test:db` | Applies all migrations + seed to an in-memory Postgres and tests the RLS/trigger rules (no Docker needed) |
+
+## Project structure
+
+```
+actions/            Server Actions (auth, campaigns, quests, oracle, guilds)
+app/(auth)/         login, signup
+app/(dashboard)/    dashboard, campaigns, board/[campaignId], team, join/[token], records
+components/ui/      shared primitives (Button, ParchmentDialog, SubmitButton, Notice…)
+lib/ai/             provider switch, Zod schemas, Oracle service
+lib/supabase/       typed server/browser clients + session proxy
+supabase/           append-only migrations and seed
+scripts/            database test suite
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for data flow and design decisions.
+
+## Roadmap
+
+XP and levels (derived from completed quests), email invites, OAuth sign-in, persisted quest ordering, filter/search, campaign templates, an activity feed.

@@ -1,22 +1,37 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import type { Database } from '@/types/database.types';
+
+export type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
 
 export async function createClient() {
   const cookieStore = await cookies();
-  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+          } catch {
+            // Called from a Server Component: safe to ignore because proxy.ts
+            // refreshes the session cookie on every request.
+          }
+        },
       },
-      setAll(cookiesToSet, _headers) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
-        } catch {
-          // The `setAll` method was called from a Server Component.
-          // This can be ignored if you have a proxy refreshing
-          // user sessions.
-        }
-      },
-    },
-  });
+    }
+  );
+}
+
+/**
+ * Returns the signed-in user id or null. Server actions must call this (or
+ * getUser) themselves: actions are public POST endpoints.
+ */
+export async function getUserId(supabase: ServerSupabase): Promise<string | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id ?? null;
 }

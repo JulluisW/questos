@@ -1,80 +1,94 @@
-// actions/campaigns.ts
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { createClient, getUserId } from '@/lib/supabase/server';
+import { consultOracle } from '@/lib/ai/oracle';
+import { dbErrorMessage } from '@/lib/db-errors';
+import { campaignStatusSchema, createCampaignSchema, fieldErrors, formToObject, idSchema } from '@/lib/validation';
+import type { ActionState, CampaignStatus } from '@/types';
 
-export type ActionState = {
-  error?: string;
-  fieldErrors?: {
-    name?: string;
-    ultimate_goal?: string;
-  };
-};
+export async function createCampaignAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  if (!(await getUserId(supabase))) return { ok: false, error: 'Please sign in to forge a campaign.' };
 
-export async function createCampaignAction(_prevState: ActionState | null, formData: FormData): Promise<ActionState> {
-  const name = (formData.get('name') as string)?.trim();
-  const ultimate_goal = (formData.get('ultimate_goal') as string)?.trim();
+  const parsed = createCampaignSchema.safeParse(formToObject(formData));
+  if (!parsed.success) {
+    return { ok: false, error: 'Please fix the highlighted fields.', fieldErrors: fieldErrors(parsed.error) };
+  }
+  const { name, ultimate_goal, guild_id, intent } = parsed.data;
 
-  // 1. Schema Validation
-  const fieldErrors: ActionState['fieldErrors'] = {};
+  const { data: campaignId, error } = await supabase.rpc('forge_campaign_with_quests', {
+    p_name: name,
+    p_ultimate_goal: ultimate_goal,
+    p_guild_id: guild_id,
+    p_quests: [],
+  });
 
-  if (!name || name.length < 3) {
-    fieldErrors.name = 'Campaign title must be at least 3 characters.';
-  } else if (name.length > 60) {
-    fieldErrors.name = 'Campaign title cannot exceed 60 characters.';
+  if (error || !campaignId) {
+    return {
+      ok: false,
+      error: dbErrorMessage(error, 'Only the guild boss or a manager can forge campaigns for this guild.'),
+    };
   }
 
-  if (ultimate_goal && ultimate_goal.length > 200) {
-    fieldErrors.ultimate_goal = 'Ultimate goal cannot exceed 200 characters.';
+  let suffix = '';
+  if (intent === 'oracle') {
+    // The campaign exists regardless; the board offers a retry if this fails.
+    const directive = ultimate_goal ? `${name}: ${ultimate_goal}` : name;
+    const result = await consultOracle(supabase, { id: campaignId, name, ultimate_goal }, directive);
+    suffix = result.ok ? `?oracle=${result.count}` : '?oracle=failed';
   }
 
-  if (Object.keys(fieldErrors).length > 0) {
-    return { fieldErrors };
-  }
+  revalidatePath('/campaigns');
+  revalidatePath('/dashboard');
+  redirect(`/board/${campaignId}${suffix}`);
+}
+
+export async function setCampaignStatusAction(campaignId: string, status: CampaignStatus): Promise<ActionState> {
+  const id = idSchema.safeParse(campaignId);
+  const nextStatus = campaignStatusSchema.safeParse(status);
+  if (!id.success || !nextStatus.success) return { ok: false, error: 'Invalid request.' };
 
   const supabase = await createClient();
+  if (!(await getUserId(supabase))) return { ok: false, error: 'Please sign in again.' };
 
-  // 2. Resolve Authenticated User
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: 'Your session has expired. Please log in again.' };
-  }
-
-  // 3. Resolve Active Guild Membership
-  const { data: membership, error: guildError } = await supabase
-    .from('guild_members')
-    .select('guild_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single();
-
-  if (guildError || !membership) {
-    return { error: 'You must belong to a guild before forging a campaign.' };
-  }
-
-  // 4. Database Mutation
-  const { data: newCampaign, error: insertError } = await supabase
+  const { data, error } = await supabase
     .from('campaigns')
-    .insert([
-      {
-        guild_id: membership.guild_id,
-        name,
-        ultimate_goal: ultimate_goal || null,
-        created_by: user.id,
-      },
-    ])
-    .select('id')
-    .single();
+    .update({ status: nextStatus.data })
+    .eq('id', id.data)
+    .select('id');
 
-  if (insertError || !newCampaign) {
-    return { error: insertError?.message || 'Failed to forge campaign.' };
+  if (error || !data?.length) {
+    return {
+      ok: false,
+      error: dbErrorMessage(error, 'Only the campaign owner, guild boss or a manager can change this campaign.', 'Only the campaign owner, guild boss or a manager can change this campaign.'),
+    };
   }
 
-  // 5. URL-Driven State Redirect
-  redirect(`/board/${newCampaign.id}`);
+  revalidatePath(`/board/${id.data}`);
+  revalidatePath('/campaigns');
+  revalidatePath('/dashboard');
+  return { ok: true };
+}
+
+export async function deleteCampaignAction(campaignId: string): Promise<ActionState> {
+  const id = idSchema.safeParse(campaignId);
+  if (!id.success) return { ok: false, error: 'Invalid request.' };
+
+  const supabase = await createClient();
+  if (!(await getUserId(supabase))) return { ok: false, error: 'Please sign in again.' };
+
+  const { data, error } = await supabase.from('campaigns').delete().eq('id', id.data).select('id');
+
+  if (error || !data?.length) {
+    return {
+      ok: false,
+      error: dbErrorMessage(error, 'Only the campaign owner or guild boss can delete it.', 'Only the campaign owner or guild boss can delete it.'),
+    };
+  }
+
+  revalidatePath('/campaigns');
+  revalidatePath('/dashboard');
+  redirect('/campaigns');
 }
