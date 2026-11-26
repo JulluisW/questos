@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
 import { failed, ok, type Result } from '@/data/result';
-import type { CampaignWithQuests } from '@/types';
+import type { CampaignStatus, CampaignWithQuests } from '@/types';
 
 // 📌 READ-ME: `createClient()` is called INSIDE every function, never at the
 // top of the file. The client carries the visitor's session cookie, and RLS
@@ -32,5 +32,18 @@ export async function getRecentActiveCampaigns(limit = 3): Promise<Result<Campai
     .limit(limit);
 
   if (error) return failed('getRecentActiveCampaigns', error);
+  return ok(data);
+}
+
+/** Every campaign the user can see with this status, newest activity first. */
+export async function getCampaignsByStatus(status: CampaignStatus): Promise<Result<CampaignWithQuests[]>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('campaigns')
+    .select('*, quests(id, status), guilds(id, name)')
+    .eq('status', status)
+    .order('updated_at', { ascending: false });
+
+  if (error) return failed('getCampaignsByStatus', error);
   return ok(data);
 }

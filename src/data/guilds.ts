@@ -1,14 +1,16 @@
 import 'server-only';
 
+import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { failed, ok } from '@/data/result';
 import { canManageRole, type MyGuild } from '@/lib/queries';
 
 /**
  * Guilds where the user is boss or manager: the places they may forge a
- * campaign in (besides "solo").
+ * campaign in (besides "solo"). Cached per request, so every Forge button on a
+ * page shares one query.
  */
-export async function getManagedGuilds(userId: string) {
+export const getManagedGuilds = cache(async (userId: string) => {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('guild_members')
@@ -26,4 +28,4 @@ export async function getManagedGuilds(userId: string) {
   // It is not the security check: RLS on `campaigns` rejects a worker's insert
   // even if someone sends the request by hand.
   return ok(guilds.filter((g) => canManageRole(g.role)));
-}
+});

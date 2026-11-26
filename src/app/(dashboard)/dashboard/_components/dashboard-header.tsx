@@ -1,9 +1,6 @@
 import { Suspense } from 'react';
-import { getProfile, requireUser } from '@/data/auth';
-import { getManagedGuilds } from '@/data/guilds';
-import { isAIEnabled } from '@/lib/ai/models';
-import { ForgeCampaignButton } from '@/components/campaigns/forge-campaign';
-import { RetryButton } from '@/components/ui/retry-button';
+import { getProfile } from '@/data/auth';
+import { ForgeButtonSkeleton, ForgeCampaignLoader } from '@/components/campaigns/forge-campaign-loader';
 
 const headingClass = 'font-serif text-3xl font-bold tracking-tight text-[#1c120c]';
 
@@ -22,7 +19,7 @@ export function DashboardHeader() {
       </div>
 
       <Suspense fallback={<ForgeButtonSkeleton />}>
-        <ForgeButton />
+        <ForgeCampaignLoader />
       </Suspense>
     </div>
   );
@@ -32,26 +29,4 @@ async function WelcomeHeading() {
   const profile = await getProfile();
   const firstName = (profile.full_name || profile.username).split(' ')[0];
   return <h1 className={headingClass}>Welcome back, {firstName}</h1>;
-}
-
-/** The "Forge New Campaign" button needs the guilds you manage for its realm picker. */
-async function ForgeButton() {
-  const user = await requireUser();
-  const guilds = await getManagedGuilds(user.id);
-
-  if (!guilds.ok) {
-    return (
-      <div role="alert" className="flex items-center gap-2 text-xs text-red-900">
-        Couldn&apos;t load your guilds.
-        <RetryButton what="your guilds" />
-      </div>
-    );
-  }
-
-  return <ForgeCampaignButton realms={guilds.data} aiEnabled={isAIEnabled()} />;
-}
-
-/** Same size as the md Button (py-2 + text-xs line ≈ 34px). */
-function ForgeButtonSkeleton() {
-  return <div aria-hidden className="h-[34px] w-48 animate-pulse rounded bg-[#e6dcce]" />;
 }

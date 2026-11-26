@@ -5,8 +5,7 @@ import { getRecentActiveCampaigns } from '@/data/campaigns';
 import { CampaignCard } from '@/components/campaigns/campaign-card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SectionError } from '@/components/ui/section-error';
-
-const gridClass = 'grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3';
+import { CAMPAIGN_GRID_CLASS, CampaignGridSkeleton } from '@/components/campaigns/campaign-grid-skeleton';
 
 export function ActiveCampaigns() {
   return (
@@ -22,7 +21,7 @@ export function ActiveCampaigns() {
         </Link>
       </div>
 
-      <Suspense fallback={<ActiveCampaignsSkeleton />}>
+      <Suspense fallback={<CampaignGridSkeleton count={3} />}>
         <ActiveCampaignsList />
       </Suspense>
     </section>
@@ -45,22 +44,9 @@ async function ActiveCampaignsList() {
   }
 
   return (
-    <div className={gridClass}>
+    <div className={CAMPAIGN_GRID_CLASS}>
       {result.data.map((campaign) => (
         <CampaignCard key={campaign.id} campaign={campaign} />
-      ))}
-    </div>
-  );
-}
-
-// 📌 READ-ME: 260px is an estimate of a CampaignCard with a one-line title
-// and a two-line goal. Measure a real card in DevTools (like you did for the
-// stat cards) and adjust, so the page doesn't jump when the cards arrive.
-function ActiveCampaignsSkeleton() {
-  return (
-    <div aria-hidden className={gridClass}>
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="h-[260px] animate-pulse rounded-lg border border-[#e2d5c3] bg-[#f5f0e6]" />
       ))}
     </div>
   );

@@ -1,13 +1,14 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { Flag } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
-import { canManageRole, getMyGuilds } from '@/lib/queries';
-import { isAIEnabled } from '@/lib/ai/models';
+import { getCampaignsByStatus } from '@/data/campaigns';
 import { cn } from '@/lib/utils';
 import { campaignStatusSchema } from '@/lib/validation';
 import { CampaignCard } from '@/components/campaigns/campaign-card';
-import { ForgeCampaignButton } from '@/components/campaigns/forge-campaign';
+import { CAMPAIGN_GRID_CLASS, CampaignGridSkeleton } from '@/components/campaigns/campaign-grid-skeleton';
+import { ForgeButtonSkeleton, ForgeCampaignLoader } from '@/components/campaigns/forge-campaign-loader';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SectionError } from '@/components/ui/section-error';
 import type { CampaignStatus } from '@/types';
 
 export const metadata = { title: 'Campaigns' };
@@ -18,27 +19,12 @@ const TABS: { status: CampaignStatus; label: string }[] = [
   { status: 'archived', label: 'Archived' },
 ];
 
+// The page itself fetches nothing: the heading and tabs render at once, and
+// the Forge button and the grid each stream in from their own <Suspense>.
 export default async function CampaignsPage({ searchParams }: PageProps<'/campaigns'>) {
   const params = await searchParams;
   const status = campaignStatusSchema.catch('active').parse(params.status);
   const openForge = params.new === 'true';
-
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth.user!.id;
-
-  // RLS returns the user's solo campaigns plus every campaign of their guilds.
-  const [{ data: campaigns }, guilds] = await Promise.all([
-    supabase
-      .from('campaigns')
-      .select('*, quests(id, status), guilds(id, name)')
-      .eq('status', status)
-      .order('updated_at', { ascending: false }),
-    getMyGuilds(supabase, userId),
-  ]);
-
-  const realms = guilds.filter((g) => canManageRole(g.role));
-  const aiEnabled = isAIEnabled();
 
   return (
     <div className="mx-auto max-w-7xl p-4 md:p-6">
@@ -47,7 +33,9 @@ export default async function CampaignsPage({ searchParams }: PageProps<'/campai
           <h1 className="font-serif text-3xl font-bold tracking-tight text-[#1c120c]">Campaign Realm</h1>
           <p className="mt-1 text-sm text-stone-600">Your solo ventures and your guilds&apos; campaigns.</p>
         </div>
-        <ForgeCampaignButton realms={realms} aiEnabled={aiEnabled} defaultOpen={openForge} />
+        <Suspense fallback={<ForgeButtonSkeleton />}>
+          <ForgeCampaignLoader defaultOpen={openForge} />
+        </Suspense>
       </div>
 
       <nav aria-label="Campaign status" className="mb-6 flex gap-1">
@@ -66,28 +54,41 @@ export default async function CampaignsPage({ searchParams }: PageProps<'/campai
         ))}
       </nav>
 
-      {!campaigns?.length ? (
-        <EmptyState
-          icon={<Flag className="h-8 w-8" />}
-          title={status === 'active' ? 'No active campaigns' : `No ${status} campaigns`}
-          description={
-            status === 'active'
-              ? 'Forge your first campaign: give it a goal and let the Oracle break it into quests.'
-              : 'Campaigns you mark as ' + status + ' will appear here.'
-          }
-          action={
-            status === 'active' ? (
-              <ForgeCampaignButton realms={realms} aiEnabled={aiEnabled} label="Forge your first campaign" />
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {campaigns.map((campaign) => (
-            <CampaignCard key={campaign.id} campaign={campaign} />
-          ))}
-        </div>
-      )}
+      {/* 📌 READ-ME: `key={status}` gives each tab its own boundary. Switching
+          tabs mounts a new one, so the skeleton shows instead of the old tab's
+          cards lingering until the new list arrives. */}
+      <Suspense key={status} fallback={<CampaignGridSkeleton count={3} />}>
+        <CampaignGrid status={status} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function CampaignGrid({ status }: { status: CampaignStatus }) {
+  const result = await getCampaignsByStatus(status);
+
+  if (!result.ok) return <SectionError what="your campaigns" />;
+
+  if (result.data.length === 0) {
+    return (
+      <EmptyState
+        icon={<Flag className="h-8 w-8" />}
+        title={status === 'active' ? 'No active campaigns' : `No ${status} campaigns`}
+        description={
+          status === 'active'
+            ? 'Forge your first campaign: give it a goal and let the Oracle break it into quests.'
+            : 'Campaigns you mark as ' + status + ' will appear here.'
+        }
+        action={status === 'active' ? <ForgeCampaignLoader label="Forge your first campaign" /> : undefined}
+      />
+    );
+  }
+
+  return (
+    <div className={CAMPAIGN_GRID_CLASS}>
+      {result.data.map((campaign) => (
+        <CampaignCard key={campaign.id} campaign={campaign} />
+      ))}
     </div>
   );
 }
