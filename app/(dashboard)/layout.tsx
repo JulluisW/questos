@@ -1,15 +1,11 @@
-import { redirect } from 'next/navigation';
 import { LogOut } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
-import { getCurrentProfile } from '@/lib/queries';
+import { getProfile } from '@/data/auth';
 import { displayName, getInitials } from '@/lib/utils';
 import { signOutAction } from '@/actions/auth';
 import { MobileNav, PageTitle, SidebarNav } from '@/components/app-shell/nav';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const profile = await getCurrentProfile(supabase);
-  if (!profile) redirect('/login');
+  const profile = await getProfile();
 
   const name = displayName(profile);
 
@@ -25,7 +21,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
               </div>
               <div>
                 <p className="font-serif text-sm font-bold tracking-wider text-amber-500 uppercase">QuestOS</p>
-                <p className="font-sans text-[10px] tracking-widest text-amber-600/80 uppercase">Turn goals into legends</p>
+                <p className="font-sans text-[10px] tracking-widest text-amber-600/80 uppercase">
+                  Turn goals into legends
+                </p>
               </div>
             </div>
             <SidebarNav />
@@ -56,10 +54,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </aside>
 
         {/* Main parchment pane */}
-        <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-parchment text-[#1c120c]">
+        <main className="bg-parchment relative flex min-w-0 flex-1 flex-col overflow-y-auto text-[#1c120c]">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#1c120c_1px,transparent_1px)] bg-size-[16px_16px] opacity-[0.025] mix-blend-multiply" />
 
-          <header className="sticky top-0 z-20 flex flex-col gap-2 border-b border-wood/30 bg-parchment/95 px-4 py-3 backdrop-blur-md md:flex-row md:items-center md:justify-between md:px-8 md:py-4">
+          <header className="border-wood/30 bg-parchment/95 sticky top-0 z-20 flex flex-col gap-2 border-b px-4 py-3 backdrop-blur-md md:flex-row md:items-center md:justify-between md:px-8 md:py-4">
             <div className="flex items-center justify-between gap-3">
               <PageTitle />
               <form action={signOutAction} className="md:hidden">

@@ -47,3 +47,10 @@ yarn-error.log*
 .kilo
 repomix-output.*
 CHECKLIST.md
+
+# AI Blueprint local workflow files
+.agents/
+.claude/
+blueprint/
+CLAUDE.md
+prototypes/

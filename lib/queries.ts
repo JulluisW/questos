@@ -2,24 +2,6 @@ import type { ServerSupabase } from '@/lib/supabase/server';
 import type { BoardMember, GuildRole } from '@/types';
 import { displayName, getInitials } from '@/lib/utils';
 
-export async function getCurrentProfile(supabase: ServerSupabase) {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, username, full_name, avatar_url')
-    .eq('id', auth.user.id)
-    .maybeSingle();
-
-  return {
-    id: auth.user.id,
-    email: auth.user.email ?? '',
-    username: profile?.username ?? auth.user.email?.split('@')[0] ?? 'adventurer',
-    full_name: profile?.full_name ?? null,
-  };
-}
-
 export type MyGuild = { id: string; name: string; role: GuildRole };
 
 /** Guilds the user belongs to, with their role in each. */
