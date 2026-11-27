@@ -91,8 +91,10 @@ Dates in the seed are relative to the moment it runs, so the dashboard always lo
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
-| `npm run typecheck` | TypeScript, no emit |
+| `npm run typecheck` | Generates Next.js route types, then TypeScript with no emit |
 | `npm run test:db` | Applies all migrations + seed to an in-memory Postgres and tests the RLS/trigger rules (no Docker needed) |
+
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, `test:db` and build on every pull request and every push to `main`. It needs no secrets.
 
 ## Project structure
 

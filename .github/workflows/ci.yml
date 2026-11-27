@@ -1,0 +1,48 @@
+name: CI
+
+# Every pull request, plus every push to main (most work here lands by a
+# local squash merge pushed straight to main).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# The job only reads the repository.
+permissions:
+  contents: read
+
+# A newer push to the same branch or PR cancels the outdated run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, typecheck, DB tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Generates Next.js route types (PageProps) first, then runs tsc.
+      - name: Typecheck
+        run: npm run typecheck
+
+      # In-memory Postgres (PGlite): applies every migration and the seed,
+      # then tests the RLS and trigger rules. No services needed.
+      - name: DB tests
+        run: npm run test:db
+
+      # No Supabase env vars or secrets are needed to build.
+      - name: Build
+        run: npm run build
