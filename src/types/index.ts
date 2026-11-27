@@ -34,6 +34,20 @@ export type CampaignBoard = Campaign & {
   quests: Quest[];
 };
 
+/** A guild the signed-in user belongs to, with their role in it. */
+export type MyGuild = { id: string; name: string; role: GuildRole };
+
+/** One member row on the Team page. */
+export type TeamMember = Pick<GuildMember, 'id' | 'role' | 'joined_at' | 'user_id'> & {
+  profiles: Pick<Profile, 'full_name' | 'username'> | null;
+};
+
+/** A live invite link, readable only by the guild's boss and managers. */
+export type TeamInvite = Pick<GuildInvite, 'id' | 'token' | 'expires_at'>;
+
+/** A guild with its members and (for managers) its live invites. */
+export type TeamGuild = { guild: MyGuild; members: TeamMember[]; invites: TeamInvite[] };
+
 /** A person a quest can be assigned to on a given board. */
 export type BoardMember = {
   id: string;

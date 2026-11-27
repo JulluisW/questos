@@ -1,9 +1,11 @@
+import { Suspense } from 'react';
 import { Crown, Shield, Users } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
-import { canManageRole, getMyGuilds } from '@/lib/queries';
+import { requireUser } from '@/data/auth';
+import { canManageRole, getTeamOverview } from '@/data/guilds';
 import { cn, displayName, formatDate, getInitials } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Notice } from '@/components/ui/notice';
+import { SectionError } from '@/components/ui/section-error';
 import type { GuildRole } from '@/types';
 import { CreateGuildForm } from './_components/create-guild-form';
 import { InvitePanel } from './_components/invite-panel';
@@ -17,36 +19,9 @@ const ROLE_STYLES: Record<GuildRole, string> = {
   worker: 'bg-stone-100 text-stone-700 border-stone-300',
 };
 
+// The heading and the joined notice render at once; the guild list streams in.
 export default async function TeamPage({ searchParams }: PageProps<'/team'>) {
   const { joined } = await searchParams;
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth.user!.id;
-
-  const guilds = await getMyGuilds(supabase, userId);
-  const nowIso = new Date().toISOString();
-
-  const details = await Promise.all(
-    guilds.map(async (guild) => {
-      const [members, invites] = await Promise.all([
-        supabase
-          .from('guild_members')
-          .select('id, role, joined_at, user_id, profiles(full_name, username)')
-          .eq('guild_id', guild.id)
-          .order('joined_at', { ascending: true }),
-        canManageRole(guild.role)
-          ? supabase
-              .from('guild_invites')
-              .select('id, token, expires_at')
-              .eq('guild_id', guild.id)
-              .is('revoked_at', null)
-              .gt('expires_at', nowIso)
-              .order('created_at', { ascending: false })
-          : Promise.resolve({ data: [] }),
-      ]);
-      return { guild, members: members.data ?? [], invites: invites.data ?? [] };
-    })
-  );
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
@@ -59,6 +34,23 @@ export default async function TeamPage({ searchParams }: PageProps<'/team'>) {
 
       {joined === '1' && <Notice tone="success">Welcome to the guild! Its campaigns now appear in your realm.</Notice>}
 
+      <Suspense fallback={<GuildListSkeleton />}>
+        <GuildList />
+      </Suspense>
+    </div>
+  );
+}
+
+async function GuildList() {
+  const user = await requireUser();
+  const result = await getTeamOverview(user.id);
+  if (!result.ok) return <SectionError what="your guilds" />;
+
+  const details = result.data;
+  const userId = user.id;
+
+  return (
+    <>
       {details.length === 0 ? (
         <EmptyState
           icon={<Users className="h-8 w-8" />}
@@ -151,6 +143,35 @@ export default async function TeamPage({ searchParams }: PageProps<'/team'>) {
           </section>
         </>
       )}
+    </>
+  );
+}
+
+/** One guild card while the list loads: a header row and three member rows. */
+function GuildListSkeleton() {
+  return (
+    <div aria-hidden className="space-y-4 rounded-lg border border-[#e2d5c3] bg-[#fcf8f2] p-5 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="h-10 w-10 animate-pulse rounded bg-[#ebe1d3]" />
+        <div className="space-y-2">
+          <div className="h-5 w-48 animate-pulse rounded bg-[#ebe1d3]" />
+          <div className="h-3 w-32 animate-pulse rounded bg-[#ebe1d3]" />
+        </div>
+      </div>
+      <ul className="divide-y divide-[#ebe1d3]">
+        {[0, 1, 2].map((i) => (
+          <li key={i} className="flex items-center justify-between gap-3 py-3">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 animate-pulse rounded-full bg-[#ebe1d3]" />
+              <div className="space-y-1.5">
+                <div className="h-3.5 w-36 animate-pulse rounded bg-[#ebe1d3]" />
+                <div className="h-2.5 w-28 animate-pulse rounded bg-[#ebe1d3]" />
+              </div>
+            </div>
+            <div className="h-5 w-16 animate-pulse rounded bg-[#ebe1d3]" />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
