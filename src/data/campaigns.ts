@@ -1,8 +1,9 @@
 import 'server-only';
 
+import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { failed, ok, type Result } from '@/data/result';
-import type { CampaignStatus, CampaignWithQuests } from '@/types';
+import type { CampaignBoard, CampaignStatus, CampaignWithQuests } from '@/types';
 
 // 📌 READ-ME: `createClient()` is called INSIDE every function, never at the
 // top of the file. The client carries the visitor's session cookie, and RLS
@@ -46,4 +47,38 @@ export async function getCampaignsByStatus(status: CampaignStatus): Promise<Resu
 
   if (error) return failed('getCampaignsByStatus', error);
   return ok(data);
+}
+
+/**
+ * One campaign with its guild and quests (oldest first) for the quest board.
+ * `ok(null)` means missing or hidden by RLS: the page shows "not found" for
+ * both, so it never reveals that a hidden campaign exists. Cached per request,
+ * so `generateMetadata` and the page share one query.
+ */
+export const getCampaignBoard = cache(async (id: string): Promise<Result<CampaignBoard | null>> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('campaigns')
+    .select('*, guilds(id, name), quests(*)')
+    .eq('id', id)
+    .order('created_at', { referencedTable: 'quests', ascending: true })
+    .maybeSingle();
+
+  if (error) return failed('getCampaignBoard', error);
+  return ok(data);
+});
+
+/** The most recently touched active campaign the user can see, if any. */
+export async function getLatestActiveCampaignId(): Promise<Result<string | null>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('campaigns')
+    .select('id')
+    .eq('status', 'active')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return failed('getLatestActiveCampaignId', error);
+  return ok(data?.id ?? null);
 }

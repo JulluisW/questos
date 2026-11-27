@@ -1,25 +1,26 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Kanban } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
+import { getLatestActiveCampaignId } from '@/data/campaigns';
 import { EmptyState } from '@/components/ui/empty-state';
 import { buttonVariants } from '@/components/ui/button';
+import { SectionError } from '@/components/ui/section-error';
 
 export const metadata = { title: 'Quest Board' };
 
 /** Opens the most recently touched active campaign the user can see. */
 export default async function QuestBoardIndexPage() {
-  const supabase = await createClient();
+  const latest = await getLatestActiveCampaignId();
 
-  const { data: latest } = await supabase
-    .from('campaigns')
-    .select('id')
-    .eq('status', 'active')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  if (!latest.ok) {
+    return (
+      <div className="mx-auto max-w-3xl p-6 md:p-12">
+        <SectionError what="your campaigns" />
+      </div>
+    );
+  }
 
-  if (latest) redirect(`/board/${latest.id}`);
+  if (latest.data) redirect(`/board/${latest.data}`);
 
   return (
     <div className="mx-auto max-w-3xl p-6 md:p-12">

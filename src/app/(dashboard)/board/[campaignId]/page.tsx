@@ -1,23 +1,27 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Shield, User } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
-import { getBoardMembers } from '@/lib/queries';
+import { requireUser } from '@/data/auth';
+import { getCampaignBoard } from '@/data/campaigns';
+import { getBoardMembers, getBoardPermissions } from '@/data/guilds';
 import { isAIEnabled } from '@/lib/ai/models';
 import { idSchema } from '@/lib/validation';
 import { CAMPAIGN_STATUS_STYLES } from '@/lib/quests/constants';
 import { cn, percent } from '@/lib/utils';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Notice } from '@/components/ui/notice';
+import { SectionError } from '@/components/ui/section-error';
 import { QuestBoard } from '../_components/quest-board';
 import { CampaignActions } from '../_components/campaign-actions';
+import { BoardSkeleton } from '../_components/board-skeleton';
 
 export async function generateMetadata({ params }: PageProps<'/board/[campaignId]'>) {
   const { campaignId } = await params;
   if (!idSchema.safeParse(campaignId).success) return { title: 'Quest Board' };
-  const supabase = await createClient();
-  const { data } = await supabase.from('campaigns').select('name').eq('id', campaignId).maybeSingle();
-  return { title: data?.name ?? 'Quest Board' };
+  // Same cached read as the page below, so this costs no extra query.
+  const result = await getCampaignBoard(campaignId);
+  return { title: result.ok && result.data ? result.data.name : 'Quest Board' };
 }
 
 function oracleBanner(value: string | string[] | undefined) {
@@ -34,37 +38,37 @@ function oracleBanner(value: string | string[] | undefined) {
     : null;
 }
 
+type Banner = ReturnType<typeof oracleBanner>;
+
 export default async function QuestBoardPage({ params, searchParams }: PageProps<'/board/[campaignId]'>) {
   const { campaignId } = await params;
   const { oracle } = await searchParams;
   if (!idSchema.safeParse(campaignId).success) notFound();
 
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth.user!.id;
+  return (
+    <Suspense fallback={<BoardSkeleton />}>
+      <CampaignBoardSection campaignId={campaignId} banner={oracleBanner(oracle)} />
+    </Suspense>
+  );
+}
 
-  const { data: campaign } = await supabase
-    .from('campaigns')
-    .select('*, guilds(id, name), quests(*)')
-    .eq('id', campaignId)
-    .order('created_at', { referencedTable: 'quests', ascending: true })
-    .maybeSingle();
+async function CampaignBoardSection({ campaignId, banner }: { campaignId: string; banner: Banner }) {
+  const user = await requireUser();
+  const result = await getCampaignBoard(campaignId);
+  if (!result.ok) return <SectionError what="this board" className="m-4 md:m-6" />;
 
+  const campaign = result.data;
   if (!campaign) notFound();
 
-  const [{ data: canManage }, members, { data: role }] = await Promise.all([
-    supabase.rpc('can_manage_campaign', { p_campaign_id: campaign.id }),
-    getBoardMembers(supabase, campaign),
-    campaign.guild_id
-      ? supabase.rpc('get_my_guild_role', { p_guild_id: campaign.guild_id })
-      : Promise.resolve({ data: null }),
-  ]);
+  const [members, permissions] = await Promise.all([getBoardMembers(campaign), getBoardPermissions(campaign)]);
+  if (!members.ok || !permissions.ok) return <SectionError what="this board" className="m-4 md:m-6" />;
 
+  const { canManage, myRole } = permissions.data;
   const status = campaign.status ?? 'active';
   const total = campaign.quests.length;
   const completed = campaign.quests.filter((q) => q.status === 'completed').length;
   const progress = percent(completed, total);
-  const canDelete = campaign.guild_id ? role === 'boss' : campaign.created_by === userId;
+  const canDelete = campaign.guild_id ? myRole === 'boss' : campaign.created_by === user.id;
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
@@ -124,12 +128,12 @@ export default async function QuestBoardPage({ params, searchParams }: PageProps
         campaignId={campaign.id}
         campaignGoal={campaign.ultimate_goal}
         initialQuests={campaign.quests}
-        members={members}
-        currentUserId={userId}
+        members={members.data}
+        currentUserId={user.id}
         canManage={Boolean(canManage)}
         isGuild={Boolean(campaign.guild_id)}
         aiEnabled={isAIEnabled()}
-        initialBanner={oracleBanner(oracle)}
+        initialBanner={banner}
       />
     </div>
   );

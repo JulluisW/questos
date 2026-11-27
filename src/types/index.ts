@@ -28,6 +28,12 @@ export type CampaignWithQuests = Campaign & {
   guilds: Pick<Guild, 'id' | 'name'> | null;
 };
 
+/** A campaign with its guild and full quest list, as the quest board reads it. */
+export type CampaignBoard = Campaign & {
+  guilds: Pick<Guild, 'id' | 'name'> | null;
+  quests: Quest[];
+};
+
 /** A person a quest can be assigned to on a given board. */
 export type BoardMember = {
   id: string;
