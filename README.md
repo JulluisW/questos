@@ -44,12 +44,7 @@ supabase db reset       # applies supabase/migrations + supabase/seed.sql
 supabase status         # prints the API URL and anon key
 ```
 
-**Hosted:** link your project and push the migrations:
-
-```bash
-supabase link --project-ref <your-project-ref>
-supabase db push
-```
+**Hosted:** follow the [Deploy](#deploy) runbook. Pushing the migrations to an existing project drops data, so back it up first.
 
 ### 2. AI Oracle (optional)
 
@@ -113,6 +108,90 @@ scripts/            database test suite
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for data flow and design decisions.
+
+## Deploy
+
+The app runs on **Vercel** with a **hosted Supabase** project. Follow these steps in order. Steps 2 to 4 are read-only; step 5 changes the database and cannot be undone without the backup from step 2.
+
+Supabase CLI flags change between versions, so confirm each command with `supabase <command> --help` before running it.
+
+### 1. Before you start
+
+- CI is green on `main` (lint, typecheck, `test:db`, build).
+- The Supabase CLI is installed and logged in (`supabase login`).
+- You have a Vercel account connected to this GitHub repository.
+
+### 2. Back up the hosted database
+
+```bash
+supabase link --project-ref <your-project-ref>
+supabase db dump -f supabase/dumps/schema-$(date +%F).sql
+supabase db dump --data-only -f supabase/dumps/data-$(date +%F).sql
+```
+
+The CLI runs `pg_dump` in a container, so Docker must be running. `supabase/dumps/` is git-ignored: backups contain user data and must never be committed.
+
+### 3. Preview the migrations
+
+```bash
+supabase migration list        # which migrations the hosted project already has
+supabase db push --dry-run     # what would be applied, without applying it
+```
+
+### 4. Know the data loss
+
+`supabase/migrations/20261105000001_mvp_foundations.sql` (lines 15 and 16) removes the prototype's XP data:
+
+- `quests.xp_reward` is dropped.
+- `profiles.total_xp` is dropped.
+
+Both are permanent. They can only be recovered from the step 2 backup. XP will return as a derived value (see the roadmap), not from these columns.
+
+### 5. Apply the migrations
+
+```bash
+supabase db push
+```
+
+**Never run `supabase/seed.sql` against production.** It creates five demo accounts that all share the password `12345678`.
+
+### 6. Supabase Auth URLs
+
+In the Supabase dashboard, under Authentication > URL Configuration:
+
+- **Site URL:** your production origin, for example `https://<your-app>.vercel.app`. Email confirmation links land there, and the user then signs in.
+- **Redirect URLs:** add the same origin.
+
+### 7. Vercel project and environment variables
+
+Import the repository in Vercel. The framework (Next.js) and build command (`npm run build`) are detected automatically. Then set these variables for **Production**:
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase > Project Settings > API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Public by design: RLS enforces access |
+| `OPENAI_API_KEY` | for the Oracle | Server-only. Without it the Oracle buttons are disabled |
+| `OPENAI_MODEL` | no | Defaults to `gpt-6-luna` |
+| `AI_HOURLY_LIMIT` | no | Oracle consultations per user per hour (default 10) |
+| `NEXT_PUBLIC_SITE_URL` | no | Set it once you have a custom domain; otherwise Vercel's production URL is used for metadata, `robots.txt` and the sitemap |
+
+Do **not** set `OLLAMA_BASE_URL` or `OLLAMA_MODEL` in production (they would point the Oracle at a server that does not exist there), and never add a Supabase service-role key: the app does not use one.
+
+Deploy, or redeploy after changing variables (`NEXT_PUBLIC_*` values are fixed at build time).
+
+### 8. Smoke test
+
+1. Sign up with a new account, confirm the email if confirmation is on, and sign in.
+2. Forge a campaign with the Oracle and check that quests appear.
+3. Drag a quest to another column and reload: it stays.
+4. Found a guild, create an invite link, and open it in a second browser with another account.
+5. Complete a quest and check the Hall of Records.
+6. Open `/robots.txt`: its sitemap line shows the production URL.
+
+### 9. Rollback
+
+- **App:** use Vercel's instant rollback to the previous deployment.
+- **Database:** there is no automatic rollback. Restore from the step 2 backup; anything written after the push is lost.
 
 ## Roadmap
 
