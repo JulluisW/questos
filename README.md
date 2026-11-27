@@ -58,7 +58,7 @@ ollama pull llama3.2
 ollama serve            # exposes http://localhost:11434
 ```
 
-Or set `OPENAI_API_KEY` to use OpenAI instead. Without any provider in production, the Oracle buttons are disabled.
+Or set `OPENAI_API_KEY` to use OpenAI instead. **OpenAI is the production provider:** on the deployed site, set `OPENAI_API_KEY` (and optionally `OPENAI_MODEL`, default `gpt-6-luna`). Without any provider in production, the Oracle buttons are disabled.
 
 ### 3. App
 

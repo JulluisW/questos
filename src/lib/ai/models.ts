@@ -4,7 +4,8 @@ import type { LanguageModel } from 'ai';
 /**
  * Provider switch (server-only; never import from a Client Component).
  *
- *   OPENAI_API_KEY set  -> OpenAI (OPENAI_MODEL, default gpt-4o-mini)
+ *   OPENAI_API_KEY set  -> OpenAI, the production provider
+ *                          (OPENAI_MODEL, default gpt-6-luna)
  *   otherwise           -> local Ollama through its OpenAI-compatible API
  *                          (OLLAMA_BASE_URL, default http://localhost:11434/v1;
  *                           OLLAMA_MODEL, default llama3.2)
@@ -15,7 +16,10 @@ import type { LanguageModel } from 'ai';
 export function getAIModel(): LanguageModel {
   if (process.env.OPENAI_API_KEY) {
     const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    return openai(process.env.OPENAI_MODEL || 'gpt-4o-mini');
+    // 📌 READ-ME: gpt-6-luna is OpenAI's recommended replacement for
+    // gpt-4o-mini, which shuts down on Jan 14, 2027. OPENAI_MODEL overrides
+    // this without a code change.
+    return openai(process.env.OPENAI_MODEL || 'gpt-6-luna');
   }
 
   const ollama = createOpenAI({

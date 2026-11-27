@@ -22,7 +22,7 @@ The XP/level system from the prototype is **intentionally removed** for the MVP 
 | UI | **React 19**, **Tailwind CSS v4**, `class-variance-authority` | Parchment theme, Lora + Inter via `next/font` |
 | Drag & drop | **@dnd-kit/core** | Pointer + keyboard dragging between columns |
 | Backend | **Supabase** (`@supabase/ssr`) | Auth (cookie sessions), Postgres, RLS, RPC |
-| AI | **Vercel AI SDK v7** + `@ai-sdk/openai` | `generateText` + `Output.object` with a Zod schema; Ollama locally, OpenAI optionally |
+| AI | **Vercel AI SDK v7** + `@ai-sdk/openai` | `generateText` + `Output.object` with a Zod schema; Ollama locally, OpenAI in production (default `gpt-6-luna`) |
 | Validation | **Zod v4** | Form input, AI output |
 | Tests | **PGlite** + `node:test` | RLS/trigger tests on an in-memory Postgres |
 
@@ -148,7 +148,6 @@ scripts/            db-test.mjs
 - XP and levels **derived** from completed quests (trigger or view), never written by clients
 - Email invites, OAuth sign-in, password reset
 - Persisted quest ordering within a column; filter, sort and search
-- Production AI provider decision (OpenAI or Anthropic) before deploying the Oracle publicly
 - pgTAP or the PGlite suite in CI
 
 ---
@@ -160,3 +159,4 @@ scripts/            db-test.mjs
 | 2026-05-29 | Initial living architecture doc: Phase 1 localStorage → Phase 2 Supabase MVP, gamification math, hook-based data flow, auth guard, schema contract, Phase 3 placeholder. |
 | 2026-11-05 | Rewritten for QuestOS MVP: SSR auth + proxy, Server Actions, role-aware RLS (boss/manager/worker), guild invites, AI Oracle service with rate limiting, XP removed, PGlite RLS test suite. Phases 1–2 summarised under *Evolution*. |
 | 2026-11-26 | Application code moved under `src/` (app, actions, components, data, lib, types, proxy.ts); config, `supabase/`, `scripts/` and `public/` stay at the root. Added the `data/` read layer to the project layout. |
+| 2026-11-27 | Production AI provider decided: OpenAI, already wired into the provider switch, with `gpt-6-luna` as the default model (OpenAI's replacement for `gpt-4o-mini`, which shuts down on Jan 14, 2027). Removed from the roadmap. |
