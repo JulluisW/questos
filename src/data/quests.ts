@@ -1,8 +1,9 @@
 import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
-import { failed, ok } from '@/data/result';
+import { failed, ok, type Result } from '@/data/result';
 import { daysAgoIso } from '@/lib/utils';
+import type { Campaign, Quest } from '@/types';
 
 // 📌 READ-ME: `.or()` takes a raw PostgREST filter string. Only ever put
 // trusted values in it, like `userId` from Supabase Auth (a UUID). Never put
@@ -57,7 +58,12 @@ export async function getOpenQuestsFor(userId: string, limit = 8) {
   return ok(data);
 }
 
-export async function getRecentlyCompletedQuests(limit = 5) {
+type CompletedQuest = Pick<Quest, 'id' | 'title' | 'completed_at' | 'is_milestone'> & {
+  campaigns: Pick<Campaign, 'id' | 'name'> | null;
+};
+
+/** Completed quests across every campaign the user can see, newest first. */
+export async function getRecentlyCompletedQuests(limit = 5): Promise<Result<CompletedQuest[]>> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('quests')
