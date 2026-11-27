@@ -37,6 +37,9 @@ export const createCampaignSchema = z.object({
 
 export const campaignStatusSchema = z.enum(['active', 'completed', 'archived']);
 
+/** A `?page=` value: a positive integer, or page 1 for anything else. */
+export const pageSchema = z.coerce.number().int().min(1).max(10000).catch(1);
+
 export const questFormSchema = z.object({
   quest_id: id.optional(),
   campaign_id: id,

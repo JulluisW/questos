@@ -75,3 +75,47 @@ export async function getRecentlyCompletedQuests(limit = 5): Promise<Result<Comp
   if (error) return failed('getRecentlyCompletedQuests', error);
   return ok(data);
 }
+
+export const RECORDS_PAGE_SIZE = 25;
+
+/**
+ * One page of the Hall of Records, with exact totals. Three requests run in
+ * parallel, so the page costs one round trip.
+ */
+export async function getCompletedQuestsPage(
+  page: number
+): Promise<Result<{ quests: CompletedQuest[]; total: number; milestones: number; pageSize: number }>> {
+  const supabase = await createClient();
+  const from = (page - 1) * RECORDS_PAGE_SIZE;
+
+  const [rows, total, milestones] = await Promise.all([
+    supabase
+      .from('quests')
+      .select('id, title, completed_at, is_milestone, campaigns(id, name)')
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: false })
+      .range(from, from + RECORDS_PAGE_SIZE - 1),
+    supabase.from('quests').select('id', { count: 'exact', head: true }).eq('status', 'completed'),
+    supabase
+      .from('quests')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'completed')
+      .eq('is_milestone', true),
+  ]);
+
+  // 📌 READ-ME: asking for a page past the last record is not a failure.
+  // PostgREST answers it with "416 Range Not Satisfiable" (code PGRST103), so
+  // that one code means "this page is empty", not "show the retry box".
+  const pastTheEnd = rows.error?.code === 'PGRST103';
+  if (rows.error && !pastTheEnd) return failed('getCompletedQuestsPage', rows.error);
+  if (total.error) return failed('getCompletedQuestsPage', total.error);
+  if (milestones.error) return failed('getCompletedQuestsPage', milestones.error);
+
+  return ok({
+    quests: pastTheEnd ? [] : (rows.data ?? []),
+    total: total.count ?? 0,
+    milestones: milestones.count ?? 0,
+    pageSize: RECORDS_PAGE_SIZE,
+  });
+}
