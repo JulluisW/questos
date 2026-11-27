@@ -6,7 +6,10 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { buttonVariants } from '@/components/ui/button';
 import { JoinGuildForm } from './join-guild-form';
 
-export const metadata = { title: 'Guild Invitation' };
+// 📌 READ-ME: the invite token is in this page's URL, and a token is a
+// credential. `no-referrer` stops the browser from sending that URL to any
+// other site in the Referer header.
+export const metadata = { title: 'Guild Invitation', referrer: 'no-referrer' as const };
 
 export default async function JoinGuildPage({ params }: PageProps<'/join/[token]'>) {
   const { token } = await params;

@@ -1,7 +1,7 @@
 import { safeNextPath } from '@/lib/utils';
 import { SignUpForm } from './_components/signup-form';
 
-export const metadata = { title: 'Create account' };
+export const metadata = { title: 'Create account', alternates: { canonical: '/signup' } };
 
 export default async function SignUpPage({ searchParams }: PageProps<'/signup'>) {
   const { next } = await searchParams;

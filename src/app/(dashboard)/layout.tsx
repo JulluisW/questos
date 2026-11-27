@@ -1,8 +1,12 @@
+import type { Metadata } from 'next';
 import { LogOut } from 'lucide-react';
 import { getProfile } from '@/data/auth';
 import { displayName, getInitials } from '@/lib/utils';
 import { signOutAction } from '@/actions/auth';
 import { MobileNav, PageTitle, SidebarNav } from '@/components/app-shell/nav';
+
+// Every signed-in page is private: keep it out of search results.
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const profile = await getProfile();

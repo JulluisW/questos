@@ -59,28 +59,28 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               Every goal deserves a <span className="font-serif text-amber-500 italic">campaign.</span>
             </h2>
             <p className="font-sans text-sm leading-relaxed font-light text-stone-300">
-              Bangun ritme kerja, selesaikan milestone, dan abadikan pencapaian dalam satu sistem yang terasa hidup.
+              Build a steady rhythm, finish your milestones, and chronicle every win in one system that feels alive.
             </p>
           </div>
 
-          {/* B2B Metrics Section */}
+          {/* Product facts */}
           <div className="relative z-10 grid grid-cols-3 gap-4 border-t border-amber-900/30 pt-6">
             <div className="flex flex-col">
-              <span className="font-serif text-2xl leading-none font-bold text-amber-500">86%</span>
+              <span className="font-serif text-2xl leading-none font-bold text-amber-500">3</span>
               <span className="mt-1 font-sans text-[10px] leading-tight tracking-wide text-stone-400 uppercase">
-                Better completion
+                Guild roles
               </span>
             </div>
             <div className="flex flex-col border-l border-amber-900/30 pl-4">
-              <span className="font-serif text-2xl leading-none font-bold text-amber-500">24K</span>
+              <span className="font-serif text-2xl leading-none font-bold text-amber-500">AI</span>
               <span className="mt-1 font-sans text-[10px] leading-tight tracking-wide text-stone-400 uppercase">
-                Active quests
+                Oracle planning
               </span>
             </div>
             <div className="flex flex-col border-l border-amber-900/30 pl-4">
-              <span className="font-serif text-2xl leading-none font-bold text-amber-500">4.9/5</span>
+              <span className="font-serif text-2xl leading-none font-bold text-amber-500">RLS</span>
               <span className="mt-1 font-sans text-[10px] leading-tight tracking-wide text-stone-400 uppercase">
-                Team rating
+                Row-level security
               </span>
             </div>
           </div>

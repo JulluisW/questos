@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { cn } from '@/lib/utils';
+import { siteUrl } from '@/lib/site';
 
 import { Lora, Inter } from 'next/font/google';
 
@@ -17,8 +18,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: siteUrl,
   title: { default: 'QuestOS', template: '%s · QuestOS' },
   description: 'Turn goals into campaigns, let the AI Oracle plan the quests, and run them on a parchment Kanban board.',
+  openGraph: { siteName: 'QuestOS', type: 'website' },
 };
 
 export default function RootLayout({

@@ -1,7 +1,7 @@
 import { safeNextPath } from '@/lib/utils';
 import { LoginForm } from './_components/login-form';
 
-export const metadata = { title: 'Sign in' };
+export const metadata = { title: 'Sign in', alternates: { canonical: '/login' } };
 
 // Notices are looked up by code so the URL can't inject arbitrary text.
 const NOTICES: Record<string, string> = {
