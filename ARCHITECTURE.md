@@ -10,7 +10,7 @@
 
 The MVP is **solo-first**: everything works for one adventurer. **Guilds** are a thin layer on top that let small teams share campaigns with three roles (boss, manager, worker).
 
-The XP/level system from the prototype is **intentionally removed** for the MVP (see [Evolution](#evolution)) and is on the roadmap as a value derived from completed quests.
+The prototype's client-side XP was **removed** for the MVP (see [Evolution](#evolution)). XP and levels are back as values **derived in Postgres** from completed quests (see [XP and levels](#xp-and-levels)); nothing stores or writes them.
 
 ---
 
@@ -105,6 +105,17 @@ Helper functions are `SECURITY DEFINER` with a pinned `search_path`, which avoid
 
 Triggers: `guard_quest_update` (workers may only change status or claim/release), `validate_quest_assignee` (the assignee must belong to the campaign's audience), `release_quests_on_member_leave`, `sync_quest_completed_at`, `touch_updated_at`.
 
+### XP and levels
+
+XP is not a column. `get_my_xp()` adds it up on every read, so the only way to change it is to change a quest's status, priority or milestone flag, which the rules above already guard.
+
+- **Credit:** every completed quest earns XP for its **campaign's creator** (`campaigns.created_by`), solo or guild. The assignee does not matter.
+- **Amount:** `quest_xp(priority, is_milestone)`: low 10, medium 20, high 30, +20 for a milestone.
+- **Levels:** `level_for_xp(xp)`: reaching level L takes `50 * L * (L - 1)` XP (100, 300, 600, 1000 and so on).
+- **Access:** `get_my_xp()` is `SECURITY DEFINER` with **no arguments**, so it only ever returns the caller's own total (and keeps XP from a guild campaign after its creator leaves that guild). Only `authenticated` may execute it.
+
+Shown on the Command Center (level card) and in the desktop sidebar, both streamed in their own Suspense boundary through the cached `src/data/xp.ts`.
+
 ### Testing
 
 `npm run test:db` boots PGlite, recreates the parts of Supabase the schema needs (`auth.users`, `auth.uid()`, `anon`/`authenticated` roles, default grants), applies every migration plus the seed, and impersonates users the way PostgREST does (`SET ROLE authenticated` + `request.jwt.claim.sub`). Each scenario runs in a rolled-back transaction. Run against only the original four migrations, the suite fails on the cross-guild injection, ownership-change and worker-edit cases, which confirms it detects those regressions.
@@ -145,7 +156,7 @@ scripts/            db-test.mjs
 
 ## Roadmap
 
-- XP and levels **derived** from completed quests (trigger or view), never written by clients
+- An approver page for guild quest completions; boss-set XP per quest
 - Email invites, OAuth sign-in, password reset
 - Persisted quest ordering within a column; filter, sort and search
 - pgTAP or the PGlite suite in CI
@@ -160,3 +171,4 @@ scripts/            db-test.mjs
 | 2026-11-05 | Rewritten for QuestOS MVP: SSR auth + proxy, Server Actions, role-aware RLS (boss/manager/worker), guild invites, AI Oracle service with rate limiting, XP removed, PGlite RLS test suite. Phases 1–2 summarised under *Evolution*. |
 | 2026-11-26 | Application code moved under `src/` (app, actions, components, data, lib, types, proxy.ts); config, `supabase/`, `scripts/` and `public/` stay at the root. Added the `data/` read layer to the project layout. |
 | 2026-11-27 | Production AI provider decided: OpenAI, already wired into the provider switch, with `gpt-6-luna` as the default model (OpenAI's replacement for `gpt-4o-mini`, which shuts down on Jan 14, 2027). Removed from the roadmap. |
+| 2026-11-27 | XP and levels derived in Postgres (`get_my_xp()`): campaign creator earns XP for completed quests, growing level steps. Removed from the roadmap. |

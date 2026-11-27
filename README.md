@@ -9,7 +9,8 @@ QuestOS is a medieval-themed task manager built with Next.js 16, Supabase and th
 - **Campaigns**: forge a campaign with an ultimate goal; mark it completed or archive it.
 - **AI Oracle**: "Forge with Oracle" (or "Ask the Oracle" on any board) turns a directive into 3–8 structured quests using a Zod schema. It runs on local Ollama by default and switches to OpenAI with one env var.
 - **Quest board**: drag-and-drop Kanban (pointer or keyboard) with optimistic updates and rollback; create, edit, delete and assign quests; milestones and priorities.
-- **Command Center**: active campaigns with progress, your open quests, and recent completions.
+- **Command Center**: your level, active campaigns with progress, your open quests, and recent completions.
+- **XP and levels**: every completed quest earns XP for its campaign's creator (low 10, medium 20, high 30, +20 for a milestone). Postgres adds it up on read (`get_my_xp()`), so no client can write it. Level 2 starts at 100 XP and each level needs 100 more than the last.
 - **Guilds**: found a guild, share an invite link, and manage roles. Bosses and managers plan, workers move and claim quests.
 - **Hall of Records**: every completed quest, chronicled.
 
@@ -145,7 +146,7 @@ supabase db push --dry-run     # what would be applied, without applying it
 - `quests.xp_reward` is dropped.
 - `profiles.total_xp` is dropped.
 
-Both are permanent. They can only be recovered from the step 2 backup. XP will return as a derived value (see the roadmap), not from these columns.
+Both are permanent. They can only be recovered from the step 2 backup. XP is now a derived value (`supabase/migrations/20261127000001_xp_and_levels.sql`, functions only) and does not read these columns.
 
 ### 5. Apply the migrations
 
@@ -195,4 +196,4 @@ Deploy, or redeploy after changing variables (`NEXT_PUBLIC_*` values are fixed a
 
 ## Roadmap
 
-XP and levels (derived from completed quests), email invites, OAuth sign-in, persisted quest ordering, filter/search, campaign templates, an activity feed.
+Email invites, OAuth sign-in, persisted quest ordering, filter/search, campaign templates, an activity feed.

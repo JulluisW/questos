@@ -298,6 +298,19 @@ export type Database = {
         Args: { p_guild_id: string };
         Returns: Database['public']['Enums']['guild_role'];
       };
+      get_my_xp: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          level: number;
+          level_xp: number;
+          next_level_xp: number;
+          xp: number;
+        }[];
+      };
+      level_for_xp: {
+        Args: { p_xp: number };
+        Returns: number;
+      };
       preview_guild_invite: {
         Args: { p_token: string };
         Returns: {
@@ -306,6 +319,13 @@ export type Database = {
           guild_name: string;
           member_count: number;
         }[];
+      };
+      quest_xp: {
+        Args: {
+          p_is_milestone: boolean;
+          p_priority: Database['public']['Enums']['quest_priorities'];
+        };
+        Returns: number;
       };
     };
     Enums: {

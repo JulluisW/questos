@@ -1,4 +1,5 @@
 import { DashboardHeader } from './_components/dashboard-header';
+import { LevelCard } from './_components/level-card';
 import { StatsCards } from './_components/stats-cards';
 import { ActiveCampaigns } from './_components/active-campaigns';
 import { OpenQuests } from './_components/open-quests';
@@ -16,6 +17,7 @@ export default function DashboardPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-4 md:p-6">
       <DashboardHeader />
+      <LevelCard />
       <StatsCards />
       <ActiveCampaigns />
 

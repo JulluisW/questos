@@ -4,6 +4,7 @@ import { getProfile } from '@/data/auth';
 import { displayName, getInitials } from '@/lib/utils';
 import { signOutAction } from '@/actions/auth';
 import { MobileNav, PageTitle, SidebarNav } from '@/components/app-shell/nav';
+import { SidebarLevel } from '@/components/app-shell/sidebar-level';
 
 // Every signed-in page is private: keep it out of search results.
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -43,6 +44,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <div className="min-w-0 flex-1">
               <p className="truncate font-serif text-xs font-bold text-amber-100">{name}</p>
               <p className="truncate text-[10px] tracking-wider text-stone-400">@{profile.username}</p>
+              <SidebarLevel />
             </div>
             <form action={signOutAction}>
               <button

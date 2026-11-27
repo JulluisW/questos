@@ -55,6 +55,16 @@ export type BoardMember = {
   initials: string;
 };
 
+/** The signed-in user's XP, derived in Postgres by `get_my_xp()`. */
+export type MyXp = {
+  xp: number;
+  level: number;
+  /** Total XP at which `level` starts. */
+  levelXp: number;
+  /** Total XP at which `level + 1` starts. */
+  nextLevelXp: number;
+};
+
 /** Standard server action result. */
 export type ActionState<T = undefined> =
   | { ok: true; data?: T; message?: string }

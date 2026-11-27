@@ -533,3 +533,89 @@ test('ai_generations: append-only, own rows only', async () => {
     assert.equal(others.rows.length, 0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// XP and levels (derived from completed quests, never stored)
+// ---------------------------------------------------------------------------
+test('level_for_xp: growing steps of 100 more XP per level', async () => {
+  const cases = [[0, 1], [99, 1], [100, 2], [299, 2], [300, 3], [599, 3], [600, 4], [1000, 5], [-5, 1]];
+  for (const [xp, level] of cases) {
+    const { rows } = await db.query(`SELECT public.level_for_xp($1) AS level`, [xp]);
+    assert.equal(rows[0].level, level, `xp ${xp}`);
+  }
+  const { rows } = await db.query(`SELECT public.level_for_xp(NULL) AS level`);
+  assert.equal(rows[0].level, 1);
+});
+
+test('quest_xp: priority sets the base, milestones add 20', async () => {
+  const { rows } = await db.query(`
+    SELECT public.quest_xp('low', false) AS low, public.quest_xp('medium', false) AS medium,
+           public.quest_xp('high', false) AS high, public.quest_xp('high', true) AS high_ms,
+           public.quest_xp(NULL, NULL) AS none`);
+  assert.deepEqual(rows[0], { low: 10, medium: 20, high: 30, high_ms: 50, none: 0 });
+});
+
+const EXPECTED_XP = `
+  SELECT COALESCE(SUM(public.quest_xp(q.priority, q.is_milestone)), 0)::int AS xp
+  FROM public.quests q JOIN public.campaigns c ON c.id = q.campaign_id
+  WHERE q.status = 'completed' AND c.created_by = $1`;
+
+test('get_my_xp: each demo user gets XP from completed quests in campaigns they created', async () => {
+  await scenario(async (as) => {
+    for (const uid of DEMO_USERS) {
+      await db.exec('RESET ROLE');
+      const expected = (await db.query(EXPECTED_XP, [uid])).rows[0].xp;
+      const res = await as(uid, `SELECT * FROM public.get_my_xp()`);
+      assert.equal(res.rows?.length, 1, res.error);
+      const { xp, level, level_xp, next_level_xp } = res.rows[0];
+      assert.equal(xp, expected, uid);
+      await db.exec('RESET ROLE');
+      assert.equal(level, (await db.query(`SELECT public.level_for_xp($1) AS l`, [xp])).rows[0].l);
+      assert.equal(level_xp, 50 * level * (level - 1));
+      assert.equal(next_level_xp, 50 * (level + 1) * level);
+      assert.ok(level_xp <= xp && xp < next_level_xp);
+    }
+  });
+});
+
+test('get_my_xp: the campaign creator earns XP when a worker completes a quest', async () => {
+  await scenario(async (as) => {
+    const xpOf = async (uid) => (await as(uid, `SELECT xp FROM public.get_my_xp()`)).rows[0].xp;
+    const arthurBefore = await xpOf(ARTHUR);
+    const merlinBefore = await xpOf(MERLIN);
+    await db.exec('RESET ROLE');
+    const { rows } = await db.query(
+      `SELECT public.quest_xp(priority, is_milestone) AS worth FROM public.quests
+       WHERE campaign_id = $1 AND title = 'Write invite link flow'`,
+      [GUILD_CAMPAIGN]
+    );
+    const worth = rows[0].worth;
+    assert.ok(worth > 0);
+
+    const done = await as(
+      MERLIN,
+      `UPDATE public.quests SET status = 'completed' WHERE campaign_id = $1 AND title = 'Write invite link flow'`,
+      [GUILD_CAMPAIGN]
+    );
+    assert.equal(done.count, 1, done.error);
+    assert.equal(await xpOf(ARTHUR), arthurBefore + worth);
+    assert.equal(await xpOf(MERLIN), merlinBefore);
+
+    const undo = await as(
+      MERLIN,
+      `UPDATE public.quests SET status = 'pending' WHERE campaign_id = $1 AND title = 'Write invite link flow'`,
+      [GUILD_CAMPAIGN]
+    );
+    assert.equal(undo.count, 1, undo.error);
+    assert.equal(await xpOf(ARTHUR), arthurBefore);
+  });
+});
+
+test('get_my_xp: a user with no campaigns is level 1 with 0 XP; anon cannot call it', async () => {
+  await scenario(async (as) => {
+    const outsider = await as(OUTSIDER, `SELECT * FROM public.get_my_xp()`);
+    assert.deepEqual(outsider.rows, [{ xp: 0, level: 1, level_xp: 0, next_level_xp: 100 }], outsider.error);
+    const anon = await as(null, `SELECT * FROM public.get_my_xp()`);
+    assert.match(anon.error ?? '', /permission denied/);
+  });
+});
