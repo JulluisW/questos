@@ -2,14 +2,16 @@
 
 import { useState, useTransition } from 'react';
 import { Check, Copy, Link2, XCircle } from 'lucide-react';
-import { createInviteAction, revokeInviteAction } from '@/actions/guilds';
+import { createInviteAction, revokeEmailInviteAction, revokeInviteAction } from '@/actions/guilds';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { formatDate } from '@/lib/utils';
+import type { TeamEmailInvite, TeamInvite } from '@/types';
+import { EmailInviteForm } from './email-invite-form';
 
-type Invite = { id: string; token: string; expires_at: string };
+type InvitePanelProps = { guildId: string; invites: TeamInvite[]; emailInvites: TeamEmailInvite[] };
 
-export function InvitePanel({ guildId, invites }: { guildId: string; invites: Invite[] }) {
+export function InvitePanel({ guildId, invites, emailInvites }: InvitePanelProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -39,6 +41,12 @@ export function InvitePanel({ guildId, invites }: { guildId: string; invites: In
   const revoke = (id: string) =>
     startTransition(async () => {
       const result = await revokeInviteAction(id);
+      setError(result && !result.ok ? result.error : null);
+    });
+
+  const revokeEmail = (id: string) =>
+    startTransition(async () => {
+      const result = await revokeEmailInviteAction(id);
       setError(result && !result.ok ? result.error : null);
     });
 
@@ -91,6 +99,31 @@ export function InvitePanel({ guildId, invites }: { guildId: string; invites: In
           ))}
         </ul>
       )}
+
+      <div className="space-y-2 border-t border-dashed border-[#d3c8ba] pt-3">
+        <EmailInviteForm guildId={guildId} />
+        {emailInvites.length > 0 && (
+          <ul aria-label="Pending email invites" className="divide-y divide-[#e2d5c3]">
+            {emailInvites.map((invite) => (
+              <li key={invite.id} className="flex items-center justify-between gap-2 py-2">
+                <div className="min-w-0">
+                  <span className="block truncate text-xs text-stone-700">{invite.email}</span>
+                  <span className="text-[11px] text-stone-400">Expires {formatDate(invite.expires_at)}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => revokeEmail(invite.id)}
+                  disabled={pending}
+                  aria-label={`Revoke the invite for ${invite.email}`}
+                >
+                  <XCircle className="h-3.5 w-3.5 text-red-800" /> Revoke
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

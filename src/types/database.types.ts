@@ -86,6 +86,47 @@ export type Database = {
           },
         ];
       };
+      guild_email_invites: {
+        Row: {
+          accepted_at: string | null;
+          created_at: string;
+          created_by: string | null;
+          email: string;
+          expires_at: string;
+          guild_id: string;
+          id: string;
+          revoked_at: string | null;
+        };
+        Insert: {
+          accepted_at?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          email: string;
+          expires_at?: string;
+          guild_id: string;
+          id?: string;
+          revoked_at?: string | null;
+        };
+        Update: {
+          revoked_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'guild_email_invites_guild_id_fkey';
+            columns: ['guild_id'];
+            isOneToOne: false;
+            referencedRelation: 'guilds';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'guild_email_invites_created_by_fkey';
+            columns: ['created_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       guild_invites: {
         Row: {
           created_at: string;
@@ -261,6 +302,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      accept_email_invite: {
+        Args: { p_invite_id: string };
+        Returns: string;
+      };
       accept_guild_invite: {
         Args: { p_token: string };
         Returns: string;
@@ -281,6 +326,10 @@ export type Database = {
         Args: { p_guild_id: string };
         Returns: boolean;
       };
+      create_email_invite: {
+        Args: { p_email: string; p_guild_id: string };
+        Returns: string;
+      };
       create_guild: {
         Args: { p_name: string };
         Returns: string;
@@ -293,6 +342,15 @@ export type Database = {
           p_ultimate_goal: string | null;
         };
         Returns: string;
+      };
+      get_my_email_invites: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          expires_at: string;
+          guild_id: string;
+          guild_name: string;
+          id: string;
+        }[];
       };
       get_my_guild_ids: {
         Args: Record<PropertyKey, never>;

@@ -2,9 +2,10 @@ import 'server-only';
 
 import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/data/auth';
 import { failed, ok, type Result } from '@/data/result';
 import { displayName, getInitials } from '@/lib/utils';
-import type { BoardMember, CampaignBoard, GuildRole, MyGuild, TeamGuild } from '@/types';
+import type { BoardMember, CampaignBoard, GuildRole, MyEmailInvite, MyGuild, TeamGuild } from '@/types';
 
 /** Boss and manager may plan a guild's campaigns and manage its invites. */
 export function canManageRole(role: GuildRole | null | undefined) {
@@ -58,7 +59,8 @@ export async function getTeamOverview(userId: string): Promise<Result<TeamGuild[
   const managedIds = guilds.data.filter((g) => canManageRole(g.role)).map((g) => g.id);
 
   const supabase = await createClient();
-  const [members, invites] = await Promise.all([
+  const liveNow = new Date().toISOString();
+  const [members, invites, emailInvites] = await Promise.all([
     supabase
       .from('guild_members')
       .select('id, role, joined_at, user_id, guild_id, profiles(full_name, username)')
@@ -70,13 +72,24 @@ export async function getTeamOverview(userId: string): Promise<Result<TeamGuild[
           .select('id, token, expires_at, guild_id')
           .in('guild_id', managedIds)
           .is('revoked_at', null)
-          .gt('expires_at', new Date().toISOString())
+          .gt('expires_at', liveNow)
+          .order('created_at', { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+    managedIds.length > 0
+      ? supabase
+          .from('guild_email_invites')
+          .select('id, email, expires_at, guild_id')
+          .in('guild_id', managedIds)
+          .is('revoked_at', null)
+          .is('accepted_at', null)
+          .gt('expires_at', liveNow)
           .order('created_at', { ascending: false })
       : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (members.error) return failed('getTeamOverview', members.error);
   if (invites.error) return failed('getTeamOverview', invites.error);
+  if (emailInvites.error) return failed('getTeamOverview', emailInvites.error);
 
   return ok(
     guilds.data.map((guild) => ({
@@ -87,6 +100,9 @@ export async function getTeamOverview(userId: string): Promise<Result<TeamGuild[
       invites: (invites.data ?? [])
         .filter((i) => i.guild_id === guild.id)
         .map(({ id, token, expires_at }) => ({ id, token, expires_at })),
+      emailInvites: (emailInvites.data ?? [])
+        .filter((i) => i.guild_id === guild.id)
+        .map(({ id, email, expires_at }) => ({ id, email, expires_at })),
     }))
   );
 }
@@ -148,4 +164,13 @@ export async function getBoardPermissions(
   if (manage.error) return failed('getBoardPermissions', manage.error);
   if (role.error) return failed('getBoardPermissions', role.error);
   return ok({ canManage: Boolean(manage.data), myRole: role.data ?? null });
+}
+
+/** Invitations addressed to the signed-in user's confirmed email, for guilds they are not in yet. */
+export async function getMyEmailInvites(): Promise<Result<MyEmailInvite[]>> {
+  await requireUser();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('get_my_email_invites');
+  if (error) return failed('getMyEmailInvites', error);
+  return ok(data ?? []);
 }

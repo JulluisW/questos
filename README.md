@@ -12,7 +12,7 @@ QuestOS is a medieval-themed task manager built with Next.js 16, Supabase and th
 - **Quest board**: drag-and-drop Kanban (pointer or keyboard) with optimistic updates and rollback; create, edit, delete and assign quests; milestones and priorities.
 - **Command Center**: your level, active campaigns with progress, your open quests, and recent completions.
 - **XP and levels**: every completed quest earns XP for its campaign's creator (low 10, medium 20, high 30, +20 for a milestone). Postgres adds it up on read (`get_my_xp()`), so no client can write it. Level 2 starts at 100 XP and each level needs 100 more than the last.
-- **Guilds**: found a guild, share an invite link, and manage roles. Bosses and managers plan, workers move and claim quests.
+- **Guilds**: found a guild, share an invite link or invite an email address, and manage roles. Bosses and managers plan, workers move and claim quests.
 - **Hall of Records**: every completed quest, chronicled.
 
 ## Security model
@@ -23,11 +23,11 @@ All authorization lives in Postgres row-level security, so the UI is never trust
 | --- | --- |
 | Solo campaign owner | everything on their own campaign |
 | Guild boss | everything in the guild, delete campaigns, change roles, remove members |
-| Guild manager | create/edit campaigns and quests, create invite links |
+| Guild manager | create/edit campaigns and quests, create invite links and email invites |
 | Guild worker | view guild campaigns, move quest status, claim/release quests |
 | Anyone else | nothing |
 
-Ownership columns (`created_by`, `guild_id`, `campaign_id`) are immutable through column-level grants, `completed_at` is derived by trigger, and AI usage is rate-limited per user through an append-only ledger. [`scripts/db-test.mjs`](scripts/db-test.mjs) tests these rules against an in-memory Postgres.
+Email invites send no email: the invitee sees them on the Team page after signing in with that confirmed address, and only the guild's boss and managers can see which emails were invited. Ownership columns (`created_by`, `guild_id`, `campaign_id`) are immutable through column-level grants, `completed_at` is derived by trigger, and AI usage is rate-limited per user through an append-only ledger. [`scripts/db-test.mjs`](scripts/db-test.mjs) tests these rules against an in-memory Postgres.
 
 ## Tech stack
 
@@ -162,6 +162,7 @@ supabase db push
 In the Supabase dashboard, under Authentication > URL Configuration:
 
 - **Site URL:** your production origin, for example `https://<your-app>.vercel.app`. Email confirmation links land there, and the user then signs in.
+- **Confirm email must stay on** (Authentication > Providers > Email). Email invites trust a *confirmed* address as proof that the person owns it; with confirmation off, anyone could sign up with an invited address and join that guild.
 - **Redirect URLs:** add the same origin, plus `<origin>/auth/callback` (the password reset link lands there). To try password reset locally against the hosted project, also add `http://localhost:3000/**` (the reset link carries a `?next=` query, so an exact path entry may not match).
 
 ### 7. Vercel project and environment variables
@@ -183,7 +184,7 @@ Deploy, or redeploy after changing variables (`NEXT_PUBLIC_*` values are fixed a
 
 ### 8. Smoke test
 
-1. Sign up with a new account, confirm the email if confirmation is on, and sign in.
+1. Sign up with a new account, confirm the email (confirmation must be on, see step 6), and sign in.
 2. Forge a campaign with the Oracle and check that quests appear.
 3. Drag a quest to another column and reload: it stays.
 4. Found a guild, create an invite link, and open it in a second browser with another account.

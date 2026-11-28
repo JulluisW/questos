@@ -14,6 +14,7 @@ export type Profile = Tables<'profiles'>;
 export type Guild = Tables<'guilds'>;
 export type GuildMember = Tables<'guild_members'>;
 export type GuildInvite = Tables<'guild_invites'>;
+export type GuildEmailInvite = Tables<'guild_email_invites'>;
 export type Campaign = Tables<'campaigns'>;
 export type Quest = Tables<'quests'>;
 
@@ -45,8 +46,19 @@ export type TeamMember = Pick<GuildMember, 'id' | 'role' | 'joined_at' | 'user_i
 /** A live invite link, readable only by the guild's boss and managers. */
 export type TeamInvite = Pick<GuildInvite, 'id' | 'token' | 'expires_at'>;
 
-/** A guild with its members and (for managers) its live invites. */
-export type TeamGuild = { guild: MyGuild; members: TeamMember[]; invites: TeamInvite[] };
+/** A pending email invite, readable only by the guild's boss and managers. */
+export type TeamEmailInvite = Pick<GuildEmailInvite, 'id' | 'email' | 'expires_at'>;
+
+/** A guild with its members and (for managers) its live invite links and email invites. */
+export type TeamGuild = {
+  guild: MyGuild;
+  members: TeamMember[];
+  invites: TeamInvite[];
+  emailInvites: TeamEmailInvite[];
+};
+
+/** An invitation addressed to the signed-in user's confirmed email. */
+export type MyEmailInvite = { id: string; guild_id: string; guild_name: string; expires_at: string };
 
 /** A person a quest can be assigned to on a given board. */
 export type BoardMember = {

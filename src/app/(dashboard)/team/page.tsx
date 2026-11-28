@@ -10,6 +10,7 @@ import type { GuildRole } from '@/types';
 import { CreateGuildForm } from './_components/create-guild-form';
 import { InvitePanel } from './_components/invite-panel';
 import { MemberActions } from './_components/member-actions';
+import { PendingInvitations } from './_components/pending-invitations';
 
 export const metadata = { title: 'Guild & Team' };
 
@@ -34,6 +35,11 @@ export default async function TeamPage({ searchParams }: PageProps<'/team'>) {
 
       {joined === '1' && <Notice tone="success">Welcome to the guild! Its campaigns now appear in your realm.</Notice>}
 
+      {/* No fallback: the section is usually empty, and an empty box would flash. */}
+      <Suspense fallback={null}>
+        <PendingInvitations />
+      </Suspense>
+
       <Suspense fallback={<GuildListSkeleton />}>
         <GuildList />
       </Suspense>
@@ -55,7 +61,7 @@ async function GuildList() {
         <EmptyState
           icon={<Users className="h-8 w-8" />}
           title="You are a lone adventurer"
-          description="Found a guild to share campaigns with others, or ask a guild boss for an invite link."
+          description="Found a guild to share campaigns with others, or ask a guild boss for an invite link or an email invite."
           action={
             <div className="w-full max-w-md text-left">
               <CreateGuildForm />
@@ -64,7 +70,7 @@ async function GuildList() {
         />
       ) : (
         <>
-          {details.map(({ guild, members, invites }) => {
+          {details.map(({ guild, members, invites, emailInvites }) => {
             const viewerIsBoss = guild.role === 'boss';
             return (
               <section
@@ -133,7 +139,7 @@ async function GuildList() {
                   })}
                 </ul>
 
-                {canManageRole(guild.role) && <InvitePanel guildId={guild.id} invites={invites} />}
+                {canManageRole(guild.role) && <InvitePanel guildId={guild.id} invites={invites} emailInvites={emailInvites} />}
               </section>
             );
           })}

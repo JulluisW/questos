@@ -94,6 +94,10 @@ export const newPasswordSchema = z
   })
   .refine((v) => v.password === v.confirmPassword, { message: 'Passwords do not match.' });
 
+export const emailInviteSchema = z.object({
+  email: z.email('Enter a valid email address').max(254, 'That email address is too long'),
+});
+
 /** Flattens zod issues into { field: firstMessage }. */
 export function fieldErrors(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};

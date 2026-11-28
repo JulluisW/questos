@@ -639,3 +639,130 @@ test('account_exists_for_email: anon and users get a boolean, case and spaces ig
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Email invites (no email sent; matched to the invitee's confirmed email)
+// ---------------------------------------------------------------------------
+const INVITE_EMAIL = 'outsider@questos.dev';
+
+async function confirmOutsiderEmail() {
+  await db.exec('RESET ROLE');
+  await db.query(`UPDATE auth.users SET email_confirmed_at = NOW() WHERE id = $1`, [OUTSIDER]);
+}
+
+test('email invites: bosses and managers create them, workers and outsiders cannot', async () => {
+  await scenario(async (as) => {
+    const boss = await as(ARTHUR, `SELECT public.create_email_invite($1, $2) AS id`, [GUILD, '  OutSider@QuestOS.dev ']);
+    assert.ok(!boss.error, boss.error);
+    const manager = await as(GUINEVERE, `SELECT public.create_email_invite($1, $2) AS id`, [GUILD, 'new.knight@questos.dev']);
+    assert.ok(!manager.error, manager.error);
+    const worker = await as(MERLIN, `SELECT public.create_email_invite($1, $2) AS id`, [GUILD, 'x@questos.dev']);
+    assert.match(worker.error ?? '', /row-level security/);
+    const outsider = await as(OUTSIDER, `SELECT public.create_email_invite($1, $2) AS id`, [GUILD, 'y@questos.dev']);
+    assert.match(outsider.error ?? '', /row-level security/);
+
+    const stored = await as(ARTHUR, `SELECT email, created_by FROM public.guild_email_invites WHERE id = $1`, [boss.rows[0].id]);
+    assert.deepEqual(stored.rows[0], { email: INVITE_EMAIL, created_by: ARTHUR });
+    const workerRead = await as(MERLIN, `SELECT id FROM public.guild_email_invites`);
+    assert.equal(workerRead.rows.length, 0);
+    const anon = await as(null, `SELECT public.create_email_invite($1, $2)`, [GUILD, 'z@questos.dev']);
+    assert.match(anon.error ?? '', /permission denied/);
+  });
+});
+
+test('email invites: one live invite per address; expired ones can be re-sent', async () => {
+  await scenario(async (as) => {
+    const first = await as(ARTHUR, `SELECT public.create_email_invite($1, $2) AS id`, [GUILD, INVITE_EMAIL]);
+    assert.ok(!first.error, first.error);
+    const dup = await as(ARTHUR, `SELECT public.create_email_invite($1, $2) AS id`, [GUILD, INVITE_EMAIL]);
+    assert.match(dup.error ?? '', /already has a pending invite/);
+
+    await db.exec('RESET ROLE');
+    await db.query(`UPDATE public.guild_email_invites SET expires_at = NOW() - INTERVAL '1 minute' WHERE id = $1`, [first.rows[0].id]);
+    const again = await as(ARTHUR, `SELECT public.create_email_invite($1, $2) AS id`, [GUILD, INVITE_EMAIL]);
+    assert.ok(!again.error, again.error);
+    await db.exec('RESET ROLE');
+    const old = await db.query(`SELECT revoked_at FROM public.guild_email_invites WHERE id = $1`, [first.rows[0].id]);
+    assert.ok(old.rows[0].revoked_at);
+  });
+});
+
+test('email invites: only the confirmed invitee sees and accepts, once', async () => {
+  await scenario(async (as) => {
+    const created = await as(ARTHUR, `SELECT public.create_email_invite($1, $2) AS id`, [GUILD, INVITE_EMAIL]);
+    const inviteId = created.rows[0].id;
+
+    const unconfirmed = await as(OUTSIDER, `SELECT * FROM public.get_my_email_invites()`);
+    assert.equal(unconfirmed.rows.length, 0, unconfirmed.error);
+    const early = await as(OUTSIDER, `SELECT public.accept_email_invite($1)`, [inviteId]);
+    assert.match(early.error ?? '', /no longer valid/);
+
+    await confirmOutsiderEmail();
+    const mine = await as(OUTSIDER, `SELECT * FROM public.get_my_email_invites()`);
+    assert.equal(mine.rows.length, 1, mine.error);
+    assert.deepEqual(Object.keys(mine.rows[0]).sort(), ['expires_at', 'guild_id', 'guild_name', 'id']);
+    const someoneElse = await as(MERLIN, `SELECT * FROM public.get_my_email_invites()`);
+    assert.equal(someoneElse.rows.length, 0);
+    const wrongUser = await as(MERLIN, `SELECT public.accept_email_invite($1)`, [inviteId]);
+    assert.match(wrongUser.error ?? '', /no longer valid/);
+
+    const accept = await as(OUTSIDER, `SELECT public.accept_email_invite($1) AS guild_id`, [inviteId]);
+    assert.equal(accept.rows?.[0]?.guild_id, GUILD, accept.error);
+    await db.exec('RESET ROLE');
+    const member = await db.query(`SELECT role FROM public.guild_members WHERE guild_id = $1 AND user_id = $2`, [GUILD, OUTSIDER]);
+    assert.equal(member.rows[0].role, 'worker');
+    const row = await db.query(`SELECT accepted_at FROM public.guild_email_invites WHERE id = $1`, [inviteId]);
+    assert.ok(row.rows[0].accepted_at);
+
+    const twice = await as(OUTSIDER, `SELECT public.accept_email_invite($1)`, [inviteId]);
+    assert.match(twice.error ?? '', /no longer valid/);
+    const afterJoin = await as(OUTSIDER, `SELECT * FROM public.get_my_email_invites()`);
+    assert.equal(afterJoin.rows.length, 0);
+  });
+});
+
+test('email invites: revoked or expired invites cannot be accepted; only revoked_at is updatable', async () => {
+  await scenario(async (as) => {
+    await confirmOutsiderEmail();
+    const a = (await as(ARTHUR, `SELECT public.create_email_invite($1, $2) AS id`, [GUILD, INVITE_EMAIL])).rows[0].id;
+    const revoke = await as(GUINEVERE, `UPDATE public.guild_email_invites SET revoked_at = NOW() WHERE id = $1`, [a]);
+    assert.equal(revoke.count, 1, revoke.error);
+    const revoked = await as(OUTSIDER, `SELECT public.accept_email_invite($1)`, [a]);
+    assert.match(revoked.error ?? '', /no longer valid/);
+
+    const b = (await as(ARTHUR, `SELECT public.create_email_invite($1, $2) AS id`, [GUILD, INVITE_EMAIL])).rows[0].id;
+    await db.exec('RESET ROLE');
+    await db.query(`UPDATE public.guild_email_invites SET expires_at = NOW() - INTERVAL '1 minute' WHERE id = $1`, [b]);
+    const expired = await as(OUTSIDER, `SELECT public.accept_email_invite($1)`, [b]);
+    assert.match(expired.error ?? '', /no longer valid/);
+
+    const workerRevoke = await as(MERLIN, `UPDATE public.guild_email_invites SET revoked_at = NOW() WHERE id = $1`, [b]);
+    assert.equal(workerRevoke.count ?? 0, 0);
+    const changeEmail = await as(ARTHUR, `UPDATE public.guild_email_invites SET email = 'evil@questos.dev' WHERE id = $1`, [b]);
+    assert.match(changeEmail.error ?? '', /permission denied/);
+    const spoof = await as(ARTHUR, `INSERT INTO public.guild_email_invites (guild_id, email, created_by) VALUES ($1, 'q@questos.dev', $2)`, [GUILD, GUINEVERE]);
+    assert.match(spoof.error ?? '', /row-level security/);
+    const anonRead = await as(null, `SELECT * FROM public.get_my_email_invites()`);
+    assert.match(anonRead.error ?? '', /permission denied/);
+    const anonAccept = await as(null, `SELECT public.accept_email_invite($1)`, [b]);
+    assert.match(anonAccept.error ?? '', /permission denied/);
+  });
+});
+
+test('email invites: an existing member sees nothing and accepting keeps their role', async () => {
+  await scenario(async (as) => {
+    const created = await as(ARTHUR, `SELECT public.create_email_invite($1, $2) AS id`, [GUILD, 'merlin@questos.dev']);
+    assert.ok(!created.error, created.error);
+    const listed = await as(MERLIN, `SELECT * FROM public.get_my_email_invites()`);
+    assert.equal(listed.rows.length, 0, listed.error);
+
+    const accept = await as(MERLIN, `SELECT public.accept_email_invite($1) AS guild_id`, [created.rows[0].id]);
+    assert.equal(accept.rows?.[0]?.guild_id, GUILD, accept.error);
+    await db.exec('RESET ROLE');
+    const member = await db.query(`SELECT role FROM public.guild_members WHERE guild_id = $1 AND user_id = $2`, [GUILD, MERLIN]);
+    assert.equal(member.rows.length, 1);
+    assert.equal(member.rows[0].role, 'worker');
+    const row = await db.query(`SELECT accepted_at FROM public.guild_email_invites WHERE id = $1`, [created.rows[0].id]);
+    assert.ok(row.rows[0].accepted_at);
+  });
+});

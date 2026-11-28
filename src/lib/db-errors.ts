@@ -7,6 +7,8 @@ const FRIENDLY_PATTERNS = [
   /member of the guild/i,
   /campaign owner/i,
   /invite link is invalid/i,
+  /already has a pending invite/i,
+  /invitation is no longer valid/i,
   /must be between \d+ and \d+ characters/i,
 ];
 
