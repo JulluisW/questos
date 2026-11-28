@@ -8,6 +8,7 @@ QuestOS is a medieval-themed task manager built with Next.js 16, Supabase and th
 
 - **Accounts**: email/password sign-up and sign-in, and a "Forgot your password?" flow that emails a reset link through Supabase Auth (an unknown email gets "No account found").
 - **Campaigns**: forge a campaign with an ultimate goal; mark it completed or archive it.
+- **Templates**: a campaign's creator can share it as a template. Every signed-in user can browse templates on `/templates`, see how often each was adopted and finished, and start their own copy, solo or for a guild they manage.
 - **AI Oracle**: "Forge with Oracle" (or "Ask the Oracle" on any board) turns a directive into 3–8 structured quests using a Zod schema. It runs on local Ollama by default and switches to OpenAI with one env var.
 - **Quest board**: drag-and-drop Kanban (pointer or keyboard) with optimistic updates and rollback; bosses, managers and solo owners reorder cards within Pending and In Progress, and the order survives a reload; create, edit, delete and assign quests; milestones and priorities.
 - **Command Center**: your level, active campaigns with progress, your open quests, and recent completions.

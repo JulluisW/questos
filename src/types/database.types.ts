@@ -51,7 +51,9 @@ export type Database = {
           id: string;
           name: string;
           search_text: string | null;
+          shared_at: string | null;
           status: Database['public']['Enums']['campaign_status'] | null;
+          template_id: string | null;
           ultimate_goal: string | null;
           updated_at: string | null;
         };
@@ -306,6 +308,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      adopt_template: {
+        Args: { p_guild_id: string | null; p_template_id: string };
+        Returns: string;
+      };
       accept_email_invite: {
         Args: { p_invite_id: string };
         Returns: string;
@@ -373,6 +379,23 @@ export type Database = {
           xp: number;
         }[];
       };
+      list_templates: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          adopted: number;
+          creator_username: string | null;
+          finished: number;
+          guilds: number;
+          id: string;
+          is_mine: boolean;
+          name: string;
+          quest_count: number;
+          shared_at: string;
+          top_quests: Json;
+          ultimate_goal: string | null;
+          users: number;
+        }[];
+      };
       level_for_xp: {
         Args: { p_xp: number };
         Returns: number;
@@ -385,6 +408,10 @@ export type Database = {
           guild_name: string;
           member_count: number;
         }[];
+      };
+      set_campaign_shared: {
+        Args: { p_campaign_id: string; p_shared: boolean };
+        Returns: undefined;
       };
       quest_xp: {
         Args: {

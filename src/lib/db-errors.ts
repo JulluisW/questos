@@ -9,6 +9,9 @@ const FRIENDLY_PATTERNS = [
   /invite link is invalid/i,
   /already has a pending invite/i,
   /invitation is no longer valid/i,
+  /creator can share it as a template/i,
+  /template is no longer shared/i,
+  /add campaigns to this guild/i,
   /must be between \d+ and \d+ characters/i,
 ];
 

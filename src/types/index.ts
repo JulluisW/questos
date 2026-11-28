@@ -67,6 +67,12 @@ export type BoardMember = {
   initials: string;
 };
 
+/** A shared template as `list_templates()` returns it, with `top_quests` narrowed to titles. */
+export type CampaignTemplate = Omit<
+  Database['public']['Functions']['list_templates']['Returns'][number],
+  'top_quests'
+> & { top_quests: string[] };
+
 /** The signed-in user's XP, derived in Postgres by `get_my_xp()`. */
 export type MyXp = {
   xp: number;

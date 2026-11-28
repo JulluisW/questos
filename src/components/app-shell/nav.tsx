@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Flag, Kanban, LayoutDashboard, Trophy, Users } from 'lucide-react';
+import { Flag, Kanban, LayoutDashboard, ScrollText, Trophy, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const NAV_ITEMS = [
   { href: '/dashboard', label: 'Command Center', icon: LayoutDashboard },
   { href: '/campaigns', label: 'Campaigns', icon: Flag },
+  { href: '/templates', label: 'Templates', icon: ScrollText },
   { href: '/board', label: 'Quest Board', icon: Kanban },
   { href: '/team', label: 'Guild & Team', icon: Users },
   { href: '/records', label: 'Hall of Records', icon: Trophy },
@@ -74,6 +75,7 @@ export function MobileNav() {
 const TITLES: Array<[string, string]> = [
   ['/dashboard', 'Command Center'],
   ['/campaigns', 'Campaigns'],
+  ['/templates', 'Templates'],
   ['/board', 'Quest Board'],
   ['/team', 'Guild & Team'],
   ['/records', 'Hall of Records'],

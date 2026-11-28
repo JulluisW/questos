@@ -114,6 +114,8 @@ async function CampaignBoardSection({ campaignId, banner }: { campaignId: string
             campaignName={campaign.name}
             status={status}
             canDelete={canDelete}
+            isCreator={campaign.created_by === user.id}
+            shared={Boolean(campaign.shared_at)}
           />
         )}
       </header>

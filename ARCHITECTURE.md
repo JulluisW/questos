@@ -87,7 +87,7 @@ Migrations live in `supabase/migrations` and are **append-only**.
 | `guild_members` | Membership + `guild_role` | One boss per guild (partial unique index); only `role` is updatable |
 | `guild_invites` | Shareable join tokens | 7-day expiry, revocable |
 | `guild_email_invites` | Invites addressed to an email | 7-day expiry, revocable; one live invite per guild and email; no email is sent |
-| `campaigns` | Goal containers | `guild_id IS NULL` = solo; `status`: active/completed/archived; `search_text` (generated, lowercased name and goal) for search |
+| `campaigns` | Goal containers | `guild_id IS NULL` = solo; `status`: active/completed/archived; `search_text` (generated, lowercased name and goal) for search; `shared_at` (shared as a template) and `template_id` (adopted from) |
 | `quests` | Work items | `status`, `priority`, `is_milestone`, `assignee_id`, `position` (order within a board column; new quests go last); `completed_at` set by trigger |
 | `ai_generations` | Oracle usage ledger | Append-only; drives rate limiting |
 
@@ -108,6 +108,8 @@ Helper functions are `SECURITY DEFINER` with a pinned `search_path`, which avoid
 | guild_email_invites | boss/manager | boss/manager (`create_email_invite`) | revoke only | — |
 
 Email invites: `get_my_email_invites()` and `accept_email_invite(id)` are `SECURITY DEFINER` and match the invite to the caller's **confirmed** `auth.users.email`, so the client never supplies the address it accepts for. They return only the guild name and expiry, and every failed accept gets the same message, so nobody learns about invites addressed to someone else. Accepting joins as a worker. This relies on Supabase Auth's "Confirm email" staying on: with it off, sign-up marks every address confirmed and an invited address could be claimed by whoever registers it first.
+
+Templates: only a campaign's creator can share it (`set_campaign_shared`), and for a guild campaign only while they still boss or manage that guild. `is_live_template()` hides a template as soon as its creator leaves, is removed or is demoted, or their account is deleted, so a former member can never keep copying the guild's plan. `list_templates()` shows shared templates to every signed-in user: the template's name, goal, first five quest titles, creator username, and aggregate counts (adopted, finished, distinct users and guilds), never who adopted it. `adopt_template()` copies the campaign and its quests (pending, unassigned, same order) into your solo realm or a guild you manage. Clients can insert only `name, ultimate_goal, status, guild_id, created_by` on `campaigns`, so `shared_at` and `template_id` cannot be faked.
 
 Triggers: `guard_quest_update` (workers may only change status or claim/release; reordering via `position` is boss, manager or solo owner only), `validate_quest_assignee` (the assignee must belong to the campaign's audience), `release_quests_on_member_leave`, `sync_quest_completed_at`, `touch_updated_at`.
 

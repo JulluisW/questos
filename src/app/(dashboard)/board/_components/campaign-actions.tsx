@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Archive, CheckCircle2, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, CheckCircle2, RotateCcw, ScrollText, Trash2 } from 'lucide-react';
 import { deleteCampaignAction, setCampaignStatusAction } from '@/actions/campaigns';
+import { setCampaignSharedAction } from '@/actions/templates';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Notice } from '@/components/ui/notice';
@@ -13,9 +14,12 @@ type CampaignActionsProps = {
   campaignName: string;
   status: CampaignStatus;
   canDelete: boolean;
+  /** Only the campaign's creator may share it as a template. */
+  isCreator: boolean;
+  shared: boolean;
 };
 
-export function CampaignActions({ campaignId, campaignName, status, canDelete }: CampaignActionsProps) {
+export function CampaignActions({ campaignId, campaignName, status, canDelete, isCreator, shared }: CampaignActionsProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -23,6 +27,12 @@ export function CampaignActions({ campaignId, campaignName, status, canDelete }:
   const setStatus = (next: CampaignStatus) =>
     startTransition(async () => {
       const result = await setCampaignStatusAction(campaignId, next);
+      setError(result && !result.ok ? result.error : null);
+    });
+
+  const setShared = (next: boolean) =>
+    startTransition(async () => {
+      const result = await setCampaignSharedAction(campaignId, next);
       setError(result && !result.ok ? result.error : null);
     });
 
@@ -41,6 +51,11 @@ export function CampaignActions({ campaignId, campaignName, status, canDelete }:
         ) : (
           <Button variant="secondary" size="sm" disabled={pending} onClick={() => setStatus('active')}>
             <RotateCcw className="h-3.5 w-3.5" /> Reopen
+          </Button>
+        )}
+        {isCreator && (
+          <Button variant="secondary" size="sm" disabled={pending} onClick={() => setShared(!shared)}>
+            <ScrollText className="h-3.5 w-3.5" /> {shared ? 'Stop sharing' : 'Share as template'}
           </Button>
         )}
         {canDelete && (

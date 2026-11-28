@@ -898,3 +898,158 @@ test('campaign search_text: lowercased name and goal, follows edits, cannot be w
     assert.match(superWrite ?? '', /"search_text" can only be updated to DEFAULT/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Campaign templates
+// ---------------------------------------------------------------------------
+test('templates: only the creator shares; listed only while shared; anon gets nothing', async () => {
+  await scenario(async (as) => {
+    const share = await as(ARTHUR, `SELECT public.set_campaign_shared($1, true)`, [ARTHUR_SOLO]);
+    assert.ok(!share.error, share.error);
+    const listed = await as(MERLIN, `SELECT id, is_mine, creator_username FROM public.list_templates()`);
+    assert.deepEqual(listed.rows, [{ id: ARTHUR_SOLO, is_mine: false, creator_username: 'arthur' }], listed.error);
+
+    // Guinevere manages Round Table but did not create Arthur's guild campaign.
+    const notCreator = await as(GUINEVERE, `SELECT public.set_campaign_shared($1, true)`, [GUILD_CAMPAIGN]);
+    assert.match(notCreator.error ?? '', /creator can share it as a template/);
+
+    const unshare = await as(ARTHUR, `SELECT public.set_campaign_shared($1, false)`, [ARTHUR_SOLO]);
+    assert.ok(!unshare.error, unshare.error);
+    const after = await as(MERLIN, `SELECT id FROM public.list_templates()`);
+    assert.equal(after.rows.length, 0);
+
+    for (const sql of [
+      `SELECT * FROM public.list_templates()`,
+      `SELECT public.set_campaign_shared('${ARTHUR_SOLO}', true)`,
+      `SELECT public.adopt_template('${ARTHUR_SOLO}', NULL)`,
+    ]) {
+      const anon = await as(null, sql);
+      assert.match(anon.error ?? '', /permission denied/, sql);
+    }
+  });
+});
+
+test('templates: adopting copies quests in board order as pending and unassigned', async () => {
+  await scenario(async (as) => {
+    // Reorder the template first, so board order differs from creation order.
+    const last = await as(
+      ARTHUR,
+      `UPDATE public.quests SET position = -1, description = 'Moved to the top', priority = 'high', is_milestone = true
+       WHERE id = (SELECT id FROM public.quests WHERE campaign_id = $1 ORDER BY position DESC LIMIT 1)
+       RETURNING title`,
+      [GUILD_CAMPAIGN]
+    );
+    assert.equal(last.count, 1, last.error);
+    await as(ARTHUR, `SELECT public.set_campaign_shared($1, true)`, [GUILD_CAMPAIGN]);
+    const adopted = await as(MERLIN, `SELECT public.adopt_template($1, NULL) AS id`, [GUILD_CAMPAIGN]);
+    assert.ok(adopted.rows?.[0]?.id, adopted.error);
+    const copyId = adopted.rows[0].id;
+
+    await db.exec('RESET ROLE');
+    const camp = await db.query(`SELECT created_by, guild_id, template_id, name FROM public.campaigns WHERE id = $1`, [copyId]);
+    const orig = await db.query(`SELECT name FROM public.campaigns WHERE id = $1`, [GUILD_CAMPAIGN]);
+    assert.deepEqual(camp.rows[0], { created_by: MERLIN, guild_id: null, template_id: GUILD_CAMPAIGN, name: orig.rows[0].name });
+
+    const src = await db.query(
+      `SELECT title, description, priority, is_milestone FROM public.quests WHERE campaign_id = $1 ORDER BY position, created_at`,
+      [GUILD_CAMPAIGN]
+    );
+    const copy = await db.query(
+      `SELECT title, description, priority, is_milestone, status, assignee_id, completed_at
+       FROM public.quests WHERE campaign_id = $1 ORDER BY position`,
+      [copyId]
+    );
+    assert.equal(copy.rows[0].title, last.rows[0].title);
+    assert.deepEqual(
+      copy.rows.map(({ title, description, priority, is_milestone }) => ({ title, description, priority, is_milestone })),
+      src.rows
+    );
+    assert.ok(copy.rows.every((r) => r.status === 'pending' && r.assignee_id === null && r.completed_at === null));
+  });
+});
+
+test('templates: guild adoption needs a manager; unshared templates cannot be adopted', async () => {
+  await scenario(async (as) => {
+    const unshared = await as(MERLIN, `SELECT public.adopt_template($1, NULL)`, [ARTHUR_SOLO]);
+    assert.match(unshared.error ?? '', /no longer shared/);
+
+    await as(ARTHUR, `SELECT public.set_campaign_shared($1, true)`, [ARTHUR_SOLO]);
+    const worker = await as(MERLIN, `SELECT public.adopt_template($1, $2)`, [ARTHUR_SOLO, GUILD]);
+    assert.match(worker.error ?? '', /add campaigns to this guild/);
+    const manager = await as(GUINEVERE, `SELECT public.adopt_template($1, $2) AS id`, [ARTHUR_SOLO, GUILD]);
+    assert.ok(manager.rows?.[0]?.id, manager.error);
+  });
+});
+
+test('templates: stats count adoptions, finishes, users and guilds', async () => {
+  await scenario(async (as) => {
+    await as(ARTHUR, `SELECT public.set_campaign_shared($1, true)`, [ARTHUR_SOLO]);
+    const solo = await as(MERLIN, `SELECT public.adopt_template($1, NULL) AS id`, [ARTHUR_SOLO]);
+    const guild = await as(GUINEVERE, `SELECT public.adopt_template($1, $2) AS id`, [ARTHUR_SOLO, GUILD]);
+    assert.ok(solo.rows?.[0]?.id && guild.rows?.[0]?.id, solo.error ?? guild.error);
+    const finish = await as(MERLIN, `UPDATE public.campaigns SET status = 'completed' WHERE id = $1`, [solo.rows[0].id]);
+    assert.equal(finish.count, 1, finish.error);
+
+    const stats = await as(GUINEVERE, `SELECT adopted, finished, users, guilds FROM public.list_templates() WHERE id = $1`, [
+      ARTHUR_SOLO,
+    ]);
+    assert.deepEqual(stats.rows[0], { adopted: 2, finished: 1, users: 1, guilds: 1 }, stats.error);
+  });
+});
+
+test('templates: clients cannot set template_id or shared_at themselves', async () => {
+  await scenario(async (as) => {
+    const fakeAdopt = await as(
+      MERLIN,
+      `INSERT INTO public.campaigns (name, created_by, template_id) VALUES ('Fake copy', $1, $2)`,
+      [MERLIN, ARTHUR_SOLO]
+    );
+    assert.match(fakeAdopt.error ?? '', /permission denied/);
+    const fakeShare = await as(ARTHUR, `INSERT INTO public.campaigns (name, created_by, shared_at) VALUES ('Fake share', $1, NOW())`, [
+      ARTHUR,
+    ]);
+    assert.match(fakeShare.error ?? '', /permission denied/);
+    const update = await as(ARTHUR, `UPDATE public.campaigns SET shared_at = NOW() WHERE id = $1`, [ARTHUR_SOLO]);
+    assert.match(update.error ?? '', /permission denied/);
+  });
+});
+
+test('templates: a creator who leaves, is removed or demoted takes the template down', async () => {
+  await scenario(async (as) => {
+    const forged = await as(
+      GUINEVERE,
+      `SELECT public.forge_campaign_with_quests('Gwen plan', NULL, $1, $2::jsonb) AS id`,
+      [GUILD, JSON.stringify([{ title: 'Secret step' }])]
+    );
+    const gwenPlan = forged.rows?.[0]?.id;
+    assert.ok(gwenPlan, forged.error);
+    const shared = await as(GUINEVERE, `SELECT public.set_campaign_shared($1, true)`, [gwenPlan]);
+    assert.ok(!shared.error, shared.error);
+    const listed = await as(MERLIN, `SELECT id FROM public.list_templates() WHERE id = $1`, [gwenPlan]);
+    assert.equal(listed.rows.length, 1, listed.error);
+
+    // Demoted to worker: hidden, and cannot share again.
+    const demote = await as(ARTHUR, `UPDATE public.guild_members SET role = 'worker' WHERE guild_id = $1 AND user_id = $2`, [
+      GUILD,
+      GUINEVERE,
+    ]);
+    assert.equal(demote.count, 1, demote.error);
+    assert.equal((await as(MERLIN, `SELECT id FROM public.list_templates() WHERE id = $1`, [gwenPlan])).rows.length, 0);
+    const reshare = await as(GUINEVERE, `SELECT public.set_campaign_shared($1, true)`, [gwenPlan]);
+    assert.match(reshare.error ?? '', /only while they manage its guild/);
+
+    // Removed from the guild: cannot adopt (copy) the guild's plan any more.
+    const remove = await as(ARTHUR, `DELETE FROM public.guild_members WHERE guild_id = $1 AND user_id = $2`, [GUILD, GUINEVERE]);
+    assert.equal(remove.count, 1, remove.error);
+    const copy = await as(GUINEVERE, `SELECT public.adopt_template($1, NULL)`, [gwenPlan]);
+    assert.match(copy.error ?? '', /no longer shared/);
+    const otherCopy = await as(MERLIN, `SELECT public.adopt_template($1, NULL)`, [gwenPlan]);
+    assert.match(otherCopy.error ?? '', /no longer shared/);
+
+    // Stopping is still allowed for the creator.
+    const stop = await as(GUINEVERE, `SELECT public.set_campaign_shared($1, false)`, [gwenPlan]);
+    assert.ok(!stop.error, stop.error);
+    const direct = await as(MERLIN, `SELECT public.is_live_template($1)`, [gwenPlan]);
+    assert.match(direct.error ?? '', /permission denied/);
+  });
+});
