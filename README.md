@@ -6,6 +6,7 @@ QuestOS is a medieval-themed task manager built with Next.js 16, Supabase and th
 
 ## Features
 
+- **Accounts**: email/password sign-up and sign-in, and a "Forgot your password?" flow that emails a reset link through Supabase Auth (an unknown email gets "No account found").
 - **Campaigns**: forge a campaign with an ultimate goal; mark it completed or archive it.
 - **AI Oracle**: "Forge with Oracle" (or "Ask the Oracle" on any board) turns a directive into 3–8 structured quests using a Zod schema. It runs on local Ollama by default and switches to OpenAI with one env var.
 - **Quest board**: drag-and-drop Kanban (pointer or keyboard) with optimistic updates and rollback; create, edit, delete and assign quests; milestones and priorities.
@@ -161,7 +162,7 @@ supabase db push
 In the Supabase dashboard, under Authentication > URL Configuration:
 
 - **Site URL:** your production origin, for example `https://<your-app>.vercel.app`. Email confirmation links land there, and the user then signs in.
-- **Redirect URLs:** add the same origin.
+- **Redirect URLs:** add the same origin, plus `<origin>/auth/callback` (the password reset link lands there). To try password reset locally against the hosted project, also add `http://localhost:3000/**` (the reset link carries a `?next=` query, so an exact path entry may not match).
 
 ### 7. Vercel project and environment variables
 

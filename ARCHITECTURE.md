@@ -47,7 +47,8 @@ flowchart LR
 1. **`src/proxy.ts`** refreshes the Supabase session cookie and redirects signed-out users to `/login?next=<path>` (the path is validated by `safeNextPath`, so open redirects are blocked).
 2. **Server Components** query Supabase with the user's cookie client. No ownership filters are added in code; RLS decides what each user sees.
 3. **Server Actions** (`src/actions/*`) re-check the session, validate input with Zod (`src/lib/validation.ts`), write with the user's client, map database errors to friendly text (`lib/db-errors.ts`) and call `revalidatePath`.
-4. **Client components** stay small: dialogs use `useActionState`, and the board keeps an optimistic copy of quests that resyncs whenever the server sends fresh props.
+4. **Password reset** uses Supabase Auth's recovery email. `/forgot-password` calls `resetPasswordForEmail` with a link built from `siteUrl` (never the Host header) after `account_exists_for_email()` confirms the email has an account. An unknown email gets "No account found", a deliberate choice that reveals whether an account exists. The link opens `/auth/callback`, a Route Handler that trades the one-time PKCE code for a session cookie, then `/reset-password` sets the new password and signs out every session. The link only works in the browser that requested it, because the PKCE verifier lives in that browser's cookie.
+5. **Client components** stay small: dialogs use `useActionState`, and the board keeps an optimistic copy of quests that resyncs whenever the server sends fresh props.
 
 ### Quest board
 

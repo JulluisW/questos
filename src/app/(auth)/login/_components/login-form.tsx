@@ -73,6 +73,14 @@ export function LoginForm({ notice, next }: LoginFormProps) {
               placeholder="••••••••"
               className={inputClass}
             />
+            <p className="mt-1.5 text-right">
+              <Link
+                href="/forgot-password"
+                className="font-sans text-[11px] text-amber-800 underline transition-colors hover:text-amber-950"
+              >
+                Forgot your password?
+              </Link>
+            </p>
           </div>
 
           <SubmitButton size="lg" className="mt-2 w-full tracking-widest" pendingLabel="Opening the gate…">

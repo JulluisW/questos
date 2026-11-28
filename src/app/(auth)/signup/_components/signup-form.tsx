@@ -6,6 +6,7 @@ import { Swords } from 'lucide-react';
 import { signUpWithEmail } from '@/actions/auth';
 import { SubmitButton } from '@/components/ui/submit-button';
 import { Notice } from '@/components/ui/notice';
+import { PASSWORD_MIN } from '@/lib/auth-constants';
 
 const inputClass =
   'focus:ring-wood w-full rounded border border-[#d3c8ba] bg-[#f5f1ea] px-3.5 py-2.5 font-sans text-sm text-[#1c120c] placeholder-stone-400 transition-all focus:border-transparent focus:ring-2 focus:outline-none';
@@ -90,7 +91,7 @@ export function SignUpForm({ next }: { next?: string }) {
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={PASSWORD_MIN}
                 placeholder="8+ characters"
                 className={inputClass}
               />
@@ -105,7 +106,7 @@ export function SignUpForm({ next }: { next?: string }) {
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={PASSWORD_MIN}
                 placeholder="••••••••"
                 className={inputClass}
               />

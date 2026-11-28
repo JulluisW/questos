@@ -6,6 +6,7 @@ import {
   QUEST_DESCRIPTION_MAX,
   QUEST_TITLE_MAX,
 } from '@/lib/quests/constants';
+import { PASSWORD_MIN } from '@/lib/auth-constants';
 
 // z.guid() (not z.uuid()) so the seed's fixed ids like 1111…-1111 validate.
 const id = z.guid('Invalid id');
@@ -81,6 +82,17 @@ export const guildNameSchema = z
 export const guildRoleSchema = z.enum(['manager', 'worker']);
 
 export { id as idSchema };
+
+export const passwordResetRequestSchema = z.object({
+  email: z.email('Enter a valid email address'),
+});
+
+export const newPasswordSchema = z
+  .object({
+    password: z.string().min(PASSWORD_MIN, `Password must be at least ${PASSWORD_MIN} characters`),
+    confirmPassword: z.string(),
+  })
+  .refine((v) => v.password === v.confirmPassword, { message: 'Passwords do not match.' });
 
 /** Flattens zod issues into { field: firstMessage }. */
 export function fieldErrors(error: z.ZodError): Record<string, string> {

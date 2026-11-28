@@ -7,6 +7,7 @@ export const metadata = { title: 'Sign in', alternates: { canonical: '/login' } 
 const NOTICES: Record<string, string> = {
   'check-email': 'Account forged! Check your inbox to confirm your email, then sign in.',
   'signed-out': 'You have left the tavern. Until next time.',
+  'password-updated': 'Password changed. Sign in with your new password.',
 };
 
 export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
@@ -14,6 +15,9 @@ export default async function LoginPage({ searchParams }: PageProps<'/login'>) {
   const nextPath = typeof next === 'string' ? safeNextPath(next, '') : '';
 
   return (
-    <LoginForm notice={typeof notice === 'string' ? NOTICES[notice] : undefined} next={nextPath || undefined} />
+    <LoginForm
+      notice={typeof notice === 'string' && Object.hasOwn(NOTICES, notice) ? NOTICES[notice] : undefined}
+      next={nextPath || undefined}
+    />
   );
 }

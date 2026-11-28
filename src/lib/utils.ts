@@ -24,12 +24,22 @@ export function formatDate(value: string | null | undefined): string {
   return dateFormatter.format(new Date(value));
 }
 
-/** Only allow same-origin relative redirects (blocks //evil.com and https://...). */
+/** Only allow same-origin relative redirects (blocks //evil.com, https://..., /\t/evil.com and /..//evil.com). */
 export function safeNextPath(next: unknown, fallback = '/dashboard'): string {
-  if (typeof next !== 'string' || !next.startsWith('/') || next.startsWith('//') || next.includes('\\')) {
+  // URL parsers drop tab/CR/LF, treat `\` like `/` and collapse `/..` segments,
+  // so `/\t/evil.com` or `/..//evil.com` would become `//evil.com`. Reject
+  // control characters and backslashes, then return the *normalized* path, and
+  // only when it stays on our origin and is not protocol-relative.
+  if (typeof next !== 'string' || !next.startsWith('/') || /[\u0000-\u001f\u007f\\]/.test(next)) {
     return fallback;
   }
-  return next;
+  try {
+    const url = new URL(next, 'http://same.origin');
+    if (url.origin !== 'http://same.origin' || url.pathname.startsWith('//')) return fallback;
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return fallback;
+  }
 }
 
 /** ISO timestamp for `days` ago (used for "this week" style queries). */

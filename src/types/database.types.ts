@@ -265,6 +265,10 @@ export type Database = {
         Args: { p_token: string };
         Returns: string;
       };
+      account_exists_for_email: {
+        Args: { p_email: string };
+        Returns: boolean;
+      };
       can_access_campaign: {
         Args: { p_campaign_id: string };
         Returns: boolean;

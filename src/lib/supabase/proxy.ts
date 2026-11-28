@@ -2,8 +2,9 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from '@/types/database.types';
 
-const AUTH_PAGES = ['/login', '/signup'];
-const PUBLIC_PREFIXES = ['/auth'];
+const AUTH_PAGES = ['/login', '/signup', '/forgot-password'];
+// /reset-password checks its own session: a recovery link signs the user in.
+const PUBLIC_PREFIXES = ['/auth', '/reset-password'];
 export const HOME_PATH = '/dashboard';
 
 export async function updateSession(request: NextRequest) {

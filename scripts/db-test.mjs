@@ -619,3 +619,23 @@ test('get_my_xp: a user with no campaigns is level 1 with 0 XP; anon cannot call
     assert.match(anon.error ?? '', /permission denied/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Password reset: account_exists_for_email (answers yes/no only)
+// ---------------------------------------------------------------------------
+test('account_exists_for_email: anon and users get a boolean, case and spaces ignored', async () => {
+  await scenario(async (as) => {
+    const ask = async (uid, email) => {
+      const res = await as(uid, `SELECT public.account_exists_for_email($1) AS exists`, [email]);
+      assert.ok(!res.error, res.error);
+      assert.deepEqual(Object.keys(res.rows[0]), ['exists']);
+      return res.rows[0].exists;
+    };
+    for (const uid of [null, MERLIN]) {
+      assert.equal(await ask(uid, 'arthur@questos.dev'), true);
+      assert.equal(await ask(uid, '  ARTHUR@questos.dev '), true);
+      assert.equal(await ask(uid, 'nobody@questos.dev'), false);
+      assert.equal(await ask(uid, ''), false);
+    }
+  });
+});
