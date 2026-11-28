@@ -862,3 +862,39 @@ test('quest position: a new quest still goes last after cards were dropped at th
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Campaign search column (generated, read-only)
+// ---------------------------------------------------------------------------
+test('campaign search_text: lowercased name and goal, follows edits, cannot be written', async () => {
+  await scenario(async (as) => {
+    const edited = await as(
+      ARTHUR,
+      `UPDATE public.campaigns SET name = 'Grail QUEST', ultimate_goal = 'Find The Cup' WHERE id = $1 RETURNING search_text`,
+      [ARTHUR_SOLO]
+    );
+    assert.equal(edited.count, 1, edited.error);
+    assert.equal(edited.rows[0].search_text, 'grail quest find the cup');
+
+    const noGoal = await as(ARTHUR, `UPDATE public.campaigns SET ultimate_goal = NULL WHERE id = $1 RETURNING search_text`, [
+      ARTHUR_SOLO,
+    ]);
+    assert.equal(noGoal.rows[0].search_text, 'grail quest ');
+
+    // Positive control: the same insert works when search_text is left out.
+    const ok = await as(ARTHUR, `INSERT INTO public.campaigns (name, created_by) VALUES ('Search control', $1)`, [ARTHUR]);
+    assert.equal(ok.count, 1, ok.error);
+    const insert = await as(ARTHUR, `INSERT INTO public.campaigns (name, created_by, search_text) VALUES ('Search control two', $1, 'x')`, [
+      ARTHUR,
+    ]);
+    assert.match(insert.error ?? '', /non-DEFAULT value into column "search_text"/);
+
+    // Even without the column grant in the way, Postgres refuses to write it.
+    await db.exec('RESET ROLE');
+    const superWrite = await db.query(`UPDATE public.campaigns SET search_text = 'x' WHERE id = $1`, [ARTHUR_SOLO]).then(
+      () => null,
+      (err) => err.message
+    );
+    assert.match(superWrite ?? '', /"search_text" can only be updated to DEFAULT/);
+  });
+});

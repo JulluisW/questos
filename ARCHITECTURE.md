@@ -48,7 +48,8 @@ flowchart LR
 2. **Server Components** query Supabase with the user's cookie client. No ownership filters are added in code; RLS decides what each user sees.
 3. **Server Actions** (`src/actions/*`) re-check the session, validate input with Zod (`src/lib/validation.ts`), write with the user's client, map database errors to friendly text (`lib/db-errors.ts`) and call `revalidatePath`.
 4. **Password reset** uses Supabase Auth's recovery email. `/forgot-password` calls `resetPasswordForEmail` with a link built from `siteUrl` (never the Host header) after `account_exists_for_email()` confirms the email has an account. An unknown email gets "No account found", a deliberate choice that reveals whether an account exists. The link opens `/auth/callback`, a Route Handler that trades the one-time PKCE code for a session cookie, then `/reset-password` sets the new password and signs out every session. The link only works in the browser that requested it, because the PKCE verifier lives in that browser's cookie.
-5. **Client components** stay small: dialogs use `useActionState`, and the board keeps an optimistic copy of quests that resyncs whenever the server sends fresh props.
+5. **Search** never puts user text inside a PostgREST `or(...)` or `filter(...)` string. Campaign search is one plain `ilike` on the generated `campaigns.search_text`, Hall of Records search an `ilike` on `title`, and `containsPattern()` (`src/lib/search.ts`) escapes `%`, `_` and `\`. The quest board filters its already-loaded quests in the browser.
+6. **Client components** stay small: dialogs use `useActionState`, and the board keeps an optimistic copy of quests that resyncs whenever the server sends fresh props.
 
 ### Quest board
 
@@ -86,7 +87,7 @@ Migrations live in `supabase/migrations` and are **append-only**.
 | `guild_members` | Membership + `guild_role` | One boss per guild (partial unique index); only `role` is updatable |
 | `guild_invites` | Shareable join tokens | 7-day expiry, revocable |
 | `guild_email_invites` | Invites addressed to an email | 7-day expiry, revocable; one live invite per guild and email; no email is sent |
-| `campaigns` | Goal containers | `guild_id IS NULL` = solo; `status`: active/completed/archived |
+| `campaigns` | Goal containers | `guild_id IS NULL` = solo; `status`: active/completed/archived; `search_text` (generated, lowercased name and goal) for search |
 | `quests` | Work items | `status`, `priority`, `is_milestone`, `assignee_id`, `position` (order within a board column; new quests go last); `completed_at` set by trigger |
 | `ai_generations` | Oracle usage ledger | Append-only; drives rate limiting |
 

@@ -3,6 +3,7 @@ import 'server-only';
 import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { failed, ok, type Result } from '@/data/result';
+import { containsPattern } from '@/lib/search';
 import type { CampaignBoard, CampaignStatus, CampaignWithQuests } from '@/types';
 
 // 📌 READ-ME: `createClient()` is called INSIDE every function, never at the
@@ -36,14 +37,25 @@ export async function getRecentActiveCampaigns(limit = 3): Promise<Result<Campai
   return ok(data);
 }
 
-/** Every campaign the user can see with this status, newest activity first. */
-export async function getCampaignsByStatus(status: CampaignStatus): Promise<Result<CampaignWithQuests[]>> {
+export type CampaignSort = 'updated' | 'created' | 'name';
+
+const CAMPAIGN_ORDER: Record<CampaignSort, { column: 'updated_at' | 'created_at' | 'name'; ascending: boolean }> = {
+  updated: { column: 'updated_at', ascending: false },
+  created: { column: 'created_at', ascending: false },
+  name: { column: 'name', ascending: true },
+};
+
+/** Every campaign the user can see with this status, optionally searched by name or goal. */
+export async function getCampaignsByStatus(
+  status: CampaignStatus,
+  { q = '', sort = 'updated' }: { q?: string; sort?: CampaignSort } = {}
+): Promise<Result<CampaignWithQuests[]>> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('campaigns')
-    .select('*, quests(id, status), guilds(id, name)')
-    .eq('status', status)
-    .order('updated_at', { ascending: false });
+  const order = CAMPAIGN_ORDER[sort];
+  let query = supabase.from('campaigns').select('*, quests(id, status), guilds(id, name)').eq('status', status);
+  // A plain ilike on the generated search_text column: user text never goes into `.or()`.
+  if (q) query = query.ilike('search_text', containsPattern(q));
+  const { data, error } = await query.order(order.column, { ascending: order.ascending });
 
   if (error) return failed('getCampaignsByStatus', error);
   return ok(data);

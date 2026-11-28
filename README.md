@@ -13,7 +13,8 @@ QuestOS is a medieval-themed task manager built with Next.js 16, Supabase and th
 - **Command Center**: your level, active campaigns with progress, your open quests, and recent completions.
 - **XP and levels**: every completed quest earns XP for its campaign's creator (low 10, medium 20, high 30, +20 for a milestone). Postgres adds it up on read (`get_my_xp()`), so no client can write it. Level 2 starts at 100 XP and each level needs 100 more than the last.
 - **Guilds**: found a guild, share an invite link or invite an email address, and manage roles. Bosses and managers plan, workers move and claim quests.
-- **Hall of Records**: every completed quest, chronicled.
+- **Hall of Records**: every completed quest, chronicled, with title search and pagination.
+- **Search and filters**: search campaigns by name or goal and sort them; search and filter the quest board by priority, assignee and milestone. Every choice lives in the URL, so it survives a reload and can be shared.
 
 ## Security model
 

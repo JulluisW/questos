@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useId, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   DndContext,
   DragOverlay,
@@ -30,6 +31,7 @@ import { BoardColumn } from './board-column';
 import { DraggableQuestCard, QuestCardView } from './quest-card';
 import { QuestDialog } from './quest-dialog';
 import { OracleButton } from './oracle-dialog';
+import { BoardFilters, hasBoardFilters, questMatches, readBoardFilters, useBoardFilterNavigation } from './board-filters';
 
 const COLUMN_STYLES: Record<QuestStatus, { color: string; icon: React.ReactNode; empty: string }> = {
   pending: {
@@ -168,6 +170,23 @@ export function QuestBoard({
     return grouped;
   }, [quests]);
 
+  // Filters only change what is shown. Drag logic keeps using the full
+  // columns, so hidden cards keep their place when a visible one moves.
+  const searchParams = useSearchParams();
+  const filters = useMemo(
+    () => readBoardFilters(new URLSearchParams(searchParams.toString()), new Set(memberById.keys())),
+    [searchParams, memberById]
+  );
+  const filtering = hasBoardFilters(filters);
+  const visible = useMemo(() => {
+    if (!filtering) return columns;
+    const keep = (list: Quest[]) => list.filter((q) => questMatches(q, filters, currentUserId));
+    return { pending: keep(columns.pending), 'in-progress': keep(columns['in-progress']), completed: keep(columns.completed) };
+  }, [columns, filters, filtering, currentUserId]);
+  const nothingMatches =
+    filtering && quests.length > 0 && COLUMN_IDS.every((status) => visible[status].length === 0);
+  const navigateFilters = useBoardFilterNavigation();
+
   const activeQuest = activeId ? quests.find((q) => q.id === activeId) : undefined;
 
   const sensors = useSensors(
@@ -269,9 +288,28 @@ export function QuestBoard({
         )}
       </div>
 
+      <BoardFilters filters={filters} members={members} showAssignee={isGuild} />
+
       {banner && (
         <Notice tone={banner.tone} onDismiss={() => setBanner(null)}>
           {banner.text}
+        </Notice>
+      )}
+
+      {nothingMatches && (
+        <Notice
+          tone="info"
+          action={
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigateFilters({ q: null, priority: null, assignee: null, milestone: null })}
+            >
+              Clear filters
+            </Button>
+          }
+        >
+          No quests match these filters.
         </Notice>
       )}
 
@@ -286,7 +324,7 @@ export function QuestBoard({
           <div className="grid min-w-[52rem] grid-cols-3 gap-4 md:min-w-0 md:gap-6">
             {COLUMN_IDS.map((status) => {
               const style = COLUMN_STYLES[status];
-              const list = columns[status];
+              const list = visible[status];
               return (
                 <BoardColumn
                   key={status}

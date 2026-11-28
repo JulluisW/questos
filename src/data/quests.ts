@@ -3,6 +3,7 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import { failed, ok, type Result } from '@/data/result';
 import { daysAgoIso } from '@/lib/utils';
+import { containsPattern } from '@/lib/search';
 import type { Campaign, Quest } from '@/types';
 
 // 📌 READ-ME: `.or()` takes a raw PostgREST filter string. Only ever put
@@ -83,25 +84,32 @@ export const RECORDS_PAGE_SIZE = 25;
  * parallel, so the page costs one round trip.
  */
 export async function getCompletedQuestsPage(
-  page: number
+  page: number,
+  q = ''
 ): Promise<Result<{ quests: CompletedQuest[]; total: number; milestones: number; pageSize: number }>> {
   const supabase = await createClient();
   const from = (page - 1) * RECORDS_PAGE_SIZE;
+  // A plain ilike on the title, applied to the rows and both counts alike.
+  const pattern = q ? containsPattern(q) : null;
+
+  const rowsQuery = supabase
+    .from('quests')
+    .select('id, title, completed_at, is_milestone, campaigns(id, name)')
+    .eq('status', 'completed');
+  const totalQuery = supabase.from('quests').select('id', { count: 'exact', head: true }).eq('status', 'completed');
+  const milestonesQuery = supabase
+    .from('quests')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'completed')
+    .eq('is_milestone', true);
 
   const [rows, total, milestones] = await Promise.all([
-    supabase
-      .from('quests')
-      .select('id, title, completed_at, is_milestone, campaigns(id, name)')
-      .eq('status', 'completed')
+    (pattern ? rowsQuery.ilike('title', pattern) : rowsQuery)
       .order('completed_at', { ascending: false, nullsFirst: false })
       .order('id', { ascending: false })
       .range(from, from + RECORDS_PAGE_SIZE - 1),
-    supabase.from('quests').select('id', { count: 'exact', head: true }).eq('status', 'completed'),
-    supabase
-      .from('quests')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'completed')
-      .eq('is_milestone', true),
+    pattern ? totalQuery.ilike('title', pattern) : totalQuery,
+    pattern ? milestonesQuery.ilike('title', pattern) : milestonesQuery,
   ]);
 
   // 📌 READ-ME: asking for a page past the last record is not a failure.

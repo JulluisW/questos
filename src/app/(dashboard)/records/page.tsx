@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { Award, Trophy } from 'lucide-react';
 import { getCompletedQuestsPage } from '@/data/quests';
 import { formatDate } from '@/lib/utils';
-import { pageSchema } from '@/lib/validation';
+import { pageSchema, searchQuerySchema } from '@/lib/validation';
+import { inputClass } from '@/components/ui/form-field';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SectionError } from '@/components/ui/section-error';
 
@@ -11,15 +12,17 @@ export const metadata = { title: 'Hall of Records' };
 
 // The title renders at once; the totals line and the list stream in together.
 export default async function RecordsPage({ searchParams }: PageProps<'/records'>) {
-  const page = pageSchema.parse((await searchParams).page);
+  const params = await searchParams;
+  const page = pageSchema.parse(params.page);
+  const q = searchQuerySchema.parse(params.q);
 
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-6">
       {/* 📌 READ-ME: `key={page}` mounts a new boundary per page, so the
           skeleton shows instead of the old page lingering until the new one
           arrives (the same trick as the Campaigns tabs). */}
-      <Suspense key={page} fallback={<RecordsSkeleton />}>
-        <RecordsList page={page} />
+      <Suspense key={`${page}|${q}`} fallback={<RecordsSkeleton q={q} />}>
+        <RecordsList page={page} q={q} />
       </Suspense>
     </div>
   );
@@ -35,13 +38,41 @@ function RecordsHeader({ children }: { children?: React.ReactNode }) {
   );
 }
 
-async function RecordsList({ page }: { page: number }) {
-  const result = await getCompletedQuestsPage(page);
+/** GET form with only `q`, so every new search starts again on page 1. */
+function RecordsSearch({ q }: { q: string }) {
+  return (
+    <form action="/records" role="search" className="mx-auto mt-4 flex max-w-md gap-2">
+      <label htmlFor="records-search" className="sr-only">
+        Search completed quests
+      </label>
+      <input
+        id="records-search"
+        name="q"
+        type="search"
+        defaultValue={q}
+        maxLength={100}
+        placeholder="Search completed quests"
+        className={inputClass}
+      />
+      <button
+        type="submit"
+        className="rounded bg-[#3d271d] px-4 py-2.5 text-xs font-semibold text-[#fbf8f3] hover:bg-[#2a1a13]"
+      >
+        Search
+      </button>
+    </form>
+  );
+}
+
+async function RecordsList({ page, q }: { page: number; q: string }) {
+  const result = await getCompletedQuestsPage(page, q);
 
   if (!result.ok) {
     return (
       <>
-        <RecordsHeader />
+        <RecordsHeader>
+          <RecordsSearch q={q} />
+        </RecordsHeader>
         <SectionError what="your records" />
       </>
     );
@@ -54,12 +85,31 @@ async function RecordsList({ page }: { page: number }) {
     <>
       <RecordsHeader>
         <p className="mt-1 text-sm text-stone-600">
-          {total} quests completed · {milestones} milestones conquered
+          {q ? (
+            <>
+              {total} {total === 1 ? 'record matches' : 'records match'} &ldquo;{q}&rdquo; · {milestones} milestones
+            </>
+          ) : (
+            <>
+              {total} quests completed · {milestones} milestones conquered
+            </>
+          )}
         </p>
         <p className="mt-0.5 text-xs text-stone-500">Across your solo campaigns and your guilds.</p>
+        <RecordsSearch q={q} />
       </RecordsHeader>
 
-      {total === 0 ? (
+      {total === 0 && q ? (
+        <EmptyState
+          icon={<Trophy className="h-8 w-8" />}
+          title={`No records match "${q}"`}
+          action={
+            <Link href="/records" className="text-sm font-semibold text-amber-800 hover:underline">
+              Clear search
+            </Link>
+          }
+        />
+      ) : total === 0 ? (
         <EmptyState
           icon={<Trophy className="h-8 w-8" />}
           title="No legends yet"
@@ -70,7 +120,7 @@ async function RecordsList({ page }: { page: number }) {
           icon={<Trophy className="h-8 w-8" />}
           title="No records on this page"
           action={
-            <Link href="/records" className="text-sm font-semibold text-amber-800 hover:underline">
+            <Link href={pageHref(1, q)} className="text-sm font-semibold text-amber-800 hover:underline">
               Back to the latest records
             </Link>
           }
@@ -108,21 +158,27 @@ async function RecordsList({ page }: { page: number }) {
         </ol>
       )}
 
-      {pageCount > 1 && quests.length > 0 && <RecordsPager page={page} pageCount={pageCount} />}
+      {pageCount > 1 && quests.length > 0 && <RecordsPager page={page} pageCount={pageCount} q={q} />}
     </>
   );
 }
 
-const pageHref = (page: number) => (page <= 1 ? '/records' : `/records?page=${page}`);
+function pageHref(page: number, q: string) {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (page > 1) params.set('page', String(page));
+  const query = params.toString();
+  return query ? `/records?${query}` : '/records';
+}
 
-function RecordsPager({ page, pageCount }: { page: number; pageCount: number }) {
+function RecordsPager({ page, pageCount, q }: { page: number; pageCount: number; q: string }) {
   const link = 'rounded px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-[#f2ebdf]';
   const disabled = 'rounded px-3 py-1.5 text-xs font-semibold text-stone-300';
 
   return (
     <nav aria-label="Records pages" className="mt-4 flex items-center justify-between">
       {page > 1 ? (
-        <Link href={pageHref(page - 1)} className={link}>
+        <Link href={pageHref(page - 1, q)} className={link}>
           Newer
         </Link>
       ) : (
@@ -134,7 +190,7 @@ function RecordsPager({ page, pageCount }: { page: number; pageCount: number }) 
         Page {page} of {pageCount}
       </span>
       {page < pageCount ? (
-        <Link href={pageHref(page + 1)} className={link}>
+        <Link href={pageHref(page + 1, q)} className={link}>
           Older
         </Link>
       ) : (
@@ -147,12 +203,14 @@ function RecordsPager({ page, pageCount }: { page: number; pageCount: number }) 
 }
 
 /** The title stays put while the totals line and five list rows load. */
-function RecordsSkeleton() {
+function RecordsSkeleton({ q }: { q: string }) {
   return (
     <>
       <RecordsHeader>
         <div aria-hidden className="mx-auto mt-2 h-4 w-56 animate-pulse rounded bg-[#ebe1d3]" />
         <div aria-hidden className="mx-auto mt-1.5 h-3 w-44 animate-pulse rounded bg-[#ebe1d3]" />
+        {/* The real form, so the header keeps its height while results load. */}
+        <RecordsSearch q={q} />
       </RecordsHeader>
       <ol
         aria-hidden

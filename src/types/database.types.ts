@@ -50,6 +50,7 @@ export type Database = {
           guild_id: string | null;
           id: string;
           name: string;
+          search_text: string | null;
           status: Database['public']['Enums']['campaign_status'] | null;
           ultimate_goal: string | null;
           updated_at: string | null;
