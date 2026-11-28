@@ -369,5 +369,13 @@ BEGIN
     AND q.title = s.title
     AND s.status = 'completed';
 
+  -- One request awaiting approval (item 25), so the Approvals page and the
+  -- card mark have something to show: Merlin asked Arthur and Guinevere.
+  UPDATE public.quests
+  SET review_requested_at = NOW() - INTERVAL '2 hours',
+      review_requested_by = v_merlin
+  WHERE campaign_id = c_auth
+    AND title = 'Audit row-level security policies';
+
   DROP TABLE seed_quests;
 END $$;

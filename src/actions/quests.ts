@@ -10,6 +10,7 @@ import {
   questFormSchema,
   questPositionSchema,
   questStatusSchema,
+  returnNoteSchema,
 } from '@/lib/validation';
 import type { ActionState, QuestStatus } from '@/types';
 
@@ -115,4 +116,61 @@ export async function claimQuestAction(questId: string, claim: boolean): Promise
   revalidatePath(`/board/${data[0].campaign_id}`);
   revalidatePath('/dashboard');
   return { ok: true };
+}
+
+function revalidateApprovalPaths(campaignId: string) {
+  revalidatePath(`/board/${campaignId}`);
+  revalidatePath('/approvals');
+  revalidatePath('/dashboard');
+}
+
+/** The worker who claimed a guild quest asks a boss or manager to approve it. */
+export async function requestApprovalAction(questId: string): Promise<ActionState> {
+  const id = idSchema.safeParse(questId);
+  if (!id.success) return { ok: false, error: 'Invalid request.' };
+
+  const supabase = await createClient();
+  if (!(await getUserId(supabase))) return { ok: false, error: 'Please sign in again.' };
+
+  const { data, error } = await supabase.rpc('request_quest_approval', { p_quest_id: id.data });
+  if (error || !data) {
+    return { ok: false, error: dbErrorMessage(error, 'You cannot request approval for this quest.') };
+  }
+
+  revalidateApprovalPaths(data);
+  return { ok: true, message: 'Approval requested. A boss or manager will review it.' };
+}
+
+/**
+ * A boss or manager approves a quest (it completes) or sends it back to In
+ * Progress with a reason. The RPC rechecks the role and the open request.
+ */
+export async function decideApprovalAction(questId: string, approve: boolean, note?: string): Promise<ActionState> {
+  const id = idSchema.safeParse(questId);
+  if (!id.success || typeof approve !== 'boolean') return { ok: false, error: 'Invalid request.' };
+
+  let reason: string | null = null;
+  if (!approve) {
+    const parsed = returnNoteSchema.safeParse(note ?? '');
+    if (!parsed.success) {
+      const message = parsed.error.issues[0]?.message ?? 'Give a reason for sending this quest back';
+      return { ok: false, error: message, fieldErrors: { note: message } };
+    }
+    reason = parsed.data;
+  }
+
+  const supabase = await createClient();
+  if (!(await getUserId(supabase))) return { ok: false, error: 'Please sign in again.' };
+
+  const { data, error } = await supabase.rpc('decide_quest_approval', {
+    p_quest_id: id.data,
+    p_approve: approve,
+    p_note: reason,
+  });
+  if (error || !data) {
+    return { ok: false, error: dbErrorMessage(error, 'Only the guild boss or a manager can approve quests.') };
+  }
+
+  revalidateApprovalPaths(data);
+  return { ok: true, message: approve ? 'Quest approved and completed.' : 'Quest sent back to In Progress.' };
 }

@@ -259,6 +259,9 @@ export type Database = {
           is_milestone: boolean | null;
           position: number;
           priority: Database['public']['Enums']['quest_priorities'] | null;
+          return_note: string | null;
+          review_requested_at: string | null;
+          review_requested_by: string | null;
           status: Database['public']['Enums']['quest_status'] | null;
           title: string;
         };
@@ -290,6 +293,13 @@ export type Database = {
           {
             foreignKeyName: 'quests_assignee_id_fkey';
             columns: ['assignee_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'quests_review_requested_by_fkey';
+            columns: ['review_requested_by'];
             isOneToOne: false;
             referencedRelation: 'profiles';
             referencedColumns: ['id'];
@@ -335,6 +345,10 @@ export type Database = {
       can_manage_guild: {
         Args: { p_guild_id: string };
         Returns: boolean;
+      };
+      decide_quest_approval: {
+        Args: { p_approve: boolean; p_note?: string | null; p_quest_id: string };
+        Returns: string;
       };
       create_email_invite: {
         Args: { p_email: string; p_guild_id: string };
@@ -430,6 +444,10 @@ export type Database = {
           guild_name: string;
           member_count: number;
         }[];
+      };
+      request_quest_approval: {
+        Args: { p_quest_id: string };
+        Returns: string;
       };
       set_campaign_shared: {
         Args: { p_campaign_id: string; p_shared: boolean };

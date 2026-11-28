@@ -127,3 +127,29 @@ export async function getCompletedQuestsPage(
     pageSize: RECORDS_PAGE_SIZE,
   });
 }
+
+export type PendingApproval = Pick<Quest, 'id' | 'title' | 'priority' | 'is_milestone' | 'review_requested_at'> & {
+  requester: { username: string; full_name: string | null } | null;
+  campaigns: Pick<Campaign, 'id' | 'name' | 'guild_id'> & { guilds: { name: string } | null };
+};
+
+/**
+ * Open approval requests in the given guilds (the ones the user bosses or
+ * manages), oldest first. `guildIds` come from getManagedGuilds, never from
+ * user input. RLS still decides which quests are visible at all.
+ */
+export async function getPendingApprovals(guildIds: string[]): Promise<Result<PendingApproval[]>> {
+  if (guildIds.length === 0) return ok([]);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('quests')
+    .select(
+      'id, title, priority, is_milestone, review_requested_at, requester:profiles!quests_review_requested_by_fkey(username, full_name), campaigns!inner(id, name, guild_id, guilds(name))'
+    )
+    .not('review_requested_at', 'is', null)
+    .in('campaigns.guild_id', guildIds)
+    .order('review_requested_at', { ascending: true });
+
+  if (error) return failed('getPendingApprovals', error);
+  return ok(data);
+}

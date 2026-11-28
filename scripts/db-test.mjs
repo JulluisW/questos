@@ -27,6 +27,7 @@ const GUILD_CAMPAIGN = '44444444-4444-4444-4444-444444444444';
 const MERLIN_SOLO = '55555555-5555-5555-5555-555555555555';
 const ARTHUR_SOLO = '66666666-6666-6666-6666-666666666666';
 const GUINEVERE = '88888888-8888-8888-8888-888888888888'; // Round Table manager, Avalon boss
+const LANCELOT = '99999999-9999-9999-9999-999999999999'; // Round Table worker
 const AVALON = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'; // Arthur is only a manager here
 const AVALON_CAMPAIGN = 'c0000000-0000-0000-0000-000000000004';
 const DEMO_USERS = [ARTHUR, MERLIN, GUINEVERE, '99999999-9999-9999-9999-999999999999', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'];
@@ -256,24 +257,56 @@ test('outsiders cannot read or add quests to other campaigns', async () => {
   });
 });
 
-test('workers can move status, and completed_at follows status', async () => {
+test('workers move quests between pending and in-progress only; completed_at follows status', async () => {
   await scenario(async (as) => {
-    const res = await as(
+    const start = await as(
       MERLIN,
+      `UPDATE public.quests SET status = 'in-progress'
+       WHERE campaign_id = $1 AND title = 'Write invite link flow' RETURNING completed_at`,
+      [GUILD_CAMPAIGN]
+    );
+    assert.equal(start.count, 1, start.error);
+    assert.equal(start.rows[0].completed_at, null);
+
+    const complete = await as(
+      MERLIN,
+      `UPDATE public.quests SET status = 'completed' WHERE campaign_id = $1 AND title = 'Write invite link flow'`,
+      [GUILD_CAMPAIGN]
+    );
+    assert.match(complete.error ?? '', /A boss or manager must approve this quest/);
+
+    const uncomplete = await as(
+      MERLIN,
+      `UPDATE public.quests SET status = 'pending' WHERE campaign_id = $1 AND title = 'Validate auth forms with Zod'`,
+      [GUILD_CAMPAIGN]
+    );
+    assert.match(uncomplete.error ?? '', /A boss or manager must approve this quest/);
+
+    // Managers still complete directly, and completed_at follows status both ways.
+    const done = await as(
+      GUINEVERE,
       `UPDATE public.quests SET status = 'completed'
        WHERE campaign_id = $1 AND title = 'Write invite link flow' RETURNING completed_at`,
       [GUILD_CAMPAIGN]
     );
-    assert.equal(res.count, 1, res.error);
-    assert.ok(res.rows[0].completed_at);
+    assert.equal(done.count, 1, done.error);
+    assert.ok(done.rows[0].completed_at);
 
     const back = await as(
-      MERLIN,
+      GUINEVERE,
       `UPDATE public.quests SET status = 'pending'
        WHERE campaign_id = $1 AND title = 'Write invite link flow' RETURNING completed_at`,
       [GUILD_CAMPAIGN]
     );
-    assert.equal(back.rows[0].completed_at, null);
+    assert.equal(back.rows[0].completed_at, null, back.error);
+
+    // A solo owner completes their own quests directly.
+    const solo = await as(
+      MERLIN,
+      `UPDATE public.quests SET status = 'completed' WHERE campaign_id = $1 AND status <> 'completed' RETURNING id`,
+      [MERLIN_SOLO]
+    );
+    assert.ok(solo.count > 0, solo.error);
   });
 });
 
@@ -592,17 +625,25 @@ test('get_my_xp: the campaign creator earns XP when a worker completes a quest',
     const worth = rows[0].worth;
     assert.ok(worth > 0);
 
-    const done = await as(
+    // A worker's quest completes through approval (item 25).
+    const claim = await as(
       MERLIN,
-      `UPDATE public.quests SET status = 'completed' WHERE campaign_id = $1 AND title = 'Write invite link flow'`,
-      [GUILD_CAMPAIGN]
+      `UPDATE public.quests SET assignee_id = $2 WHERE campaign_id = $1 AND title = 'Write invite link flow' RETURNING id`,
+      [GUILD_CAMPAIGN, MERLIN]
     );
-    assert.equal(done.count, 1, done.error);
+    const questId = claim.rows?.[0]?.id;
+    assert.ok(questId, claim.error);
+    const request = await as(MERLIN, `SELECT public.request_quest_approval($1)`, [questId]);
+    assert.ok(!request.error, request.error);
+    assert.equal(await xpOf(ARTHUR), arthurBefore, 'a request alone earns nothing');
+
+    const done = await as(GUINEVERE, `SELECT public.decide_quest_approval($1, true)`, [questId]);
+    assert.ok(!done.error, done.error);
     assert.equal(await xpOf(ARTHUR), arthurBefore + worth);
     assert.equal(await xpOf(MERLIN), merlinBefore);
 
     const undo = await as(
-      MERLIN,
+      ARTHUR,
       `UPDATE public.quests SET status = 'pending' WHERE campaign_id = $1 AND title = 'Write invite link flow'`,
       [GUILD_CAMPAIGN]
     );
@@ -1150,5 +1191,190 @@ test('activity feed: a template creator who left the guild learns nothing more a
     await as(ARTHUR, `UPDATE public.campaigns SET name = 'Renamed after Gwen left' WHERE id = $1`, [plan]);
     const after = await as(GUINEVERE, `SELECT * FROM public.get_my_template_adoptions(50)`);
     assert.equal(after.rows.length, 0, after.error);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Quest approval (item 25): workers ask, bosses and managers decide
+// ---------------------------------------------------------------------------
+const SEEDED_REQUEST = 'Audit row-level security policies'; // Merlin's, awaiting approval in the seed
+
+async function questIdOf(title, campaignId = GUILD_CAMPAIGN) {
+  await db.exec('RESET ROLE');
+  const { rows } = await db.query(`SELECT id FROM public.quests WHERE campaign_id = $1 AND title = $2`, [campaignId, title]);
+  return rows[0].id;
+}
+
+async function reviewStateOf(id) {
+  await db.exec('RESET ROLE');
+  const { rows } = await db.query(
+    `SELECT status, review_requested_at, review_requested_by, return_note, completed_at FROM public.quests WHERE id = $1`,
+    [id]
+  );
+  return rows[0];
+}
+
+test('quest approval: the seed has one open request, from the assignee', async () => {
+  const { rows } = await db.query(
+    `SELECT title, assignee_id, review_requested_by FROM public.quests WHERE review_requested_at IS NOT NULL`
+  );
+  assert.deepEqual(rows, [{ title: SEEDED_REQUEST, assignee_id: MERLIN, review_requested_by: MERLIN }]);
+});
+
+test('quest approval: clients cannot write the review columns directly', async () => {
+  await scenario(async (as) => {
+    for (const uid of [MERLIN, ARTHUR]) {
+      const ask = await as(uid, `UPDATE public.quests SET review_requested_at = NOW() WHERE campaign_id = $1`, [GUILD_CAMPAIGN]);
+      assert.match(ask.error ?? '', /permission denied/);
+      const note = await as(uid, `UPDATE public.quests SET return_note = 'hi' WHERE campaign_id = $1`, [GUILD_CAMPAIGN]);
+      assert.match(note.error ?? '', /permission denied/);
+    }
+  });
+});
+
+test('quest approval: an INSERT cannot start a quest with review values', async () => {
+  await scenario(async (as) => {
+    const insert = await as(
+      GUINEVERE,
+      `INSERT INTO public.quests (campaign_id, title, status, review_requested_at, review_requested_by, return_note)
+       VALUES ($1, 'Fake request', 'completed', NOW(), $2, 'spoofed')
+       RETURNING review_requested_at, review_requested_by, return_note`,
+      [GUILD_CAMPAIGN, OUTSIDER]
+    );
+    assert.equal(insert.count, 1, insert.error);
+    assert.deepEqual(insert.rows[0], { review_requested_at: null, review_requested_by: null, return_note: null });
+
+    const solo = await as(
+      ARTHUR,
+      `INSERT INTO public.quests (campaign_id, title, review_requested_at) VALUES ($1, 'Solo fake', NOW())
+       RETURNING review_requested_at`,
+      [ARTHUR_SOLO]
+    );
+    assert.equal(solo.rows?.[0]?.review_requested_at, null, solo.error);
+  });
+});
+
+test('quest approval: only the assignee, a worker in a guild campaign, can request it', async () => {
+  await scenario(async (as) => {
+    const request = (uid, id) => as(uid, `SELECT public.request_quest_approval($1) AS campaign_id`, [id]);
+
+    const othersQuest = await request(MERLIN, await questIdOf('Add password reset emails'));
+    assert.match(othersQuest.error ?? '', /Only the quest's assignee can request approval/);
+    const unclaimed = await request(MERLIN, await questIdOf('Write the security runbook'));
+    assert.match(unclaimed.error ?? '', /Only the quest's assignee can request approval/);
+
+    const solo = await request(MERLIN, await questIdOf('Present three potions at the solstice', MERLIN_SOLO));
+    assert.match(solo.error ?? '', /Approval is only for guild campaigns/);
+    const manager = await request(GUINEVERE, await questIdOf('Write the security runbook'));
+    assert.match(manager.error ?? '', /Bosses and managers complete quests directly/);
+    const outsider = await request(OUTSIDER, await questIdOf(SEEDED_REQUEST));
+    assert.match(outsider.error ?? '', /That quest could not be found/);
+    const completed = await request(LANCELOT, await questIdOf('Validate auth forms with Zod'));
+    assert.match(completed.error ?? '', /This quest is already completed/);
+    const twice = await request(MERLIN, await questIdOf(SEEDED_REQUEST));
+    assert.match(twice.error ?? '', /This quest is already awaiting approval/);
+
+    const id = await questIdOf('Add password reset emails');
+    const ok = await request(LANCELOT, id);
+    assert.equal(ok.rows?.[0]?.campaign_id, GUILD_CAMPAIGN, ok.error);
+    const state = await reviewStateOf(id);
+    assert.ok(state.review_requested_at);
+    assert.equal(state.review_requested_by, LANCELOT);
+    assert.equal(state.status, 'in-progress', 'a request does not move the quest');
+  });
+});
+
+test('quest approval: a manager approves, the quest completes and the creator earns XP', async () => {
+  await scenario(async (as) => {
+    const id = await questIdOf(SEEDED_REQUEST);
+    const worker = await as(MERLIN, `SELECT public.decide_quest_approval($1, true)`, [id]);
+    assert.match(worker.error ?? '', /Only the guild boss or a manager can approve quests/);
+    const outsider = await as(OUTSIDER, `SELECT public.decide_quest_approval($1, true)`, [id]);
+    assert.match(outsider.error ?? '', /That quest could not be found/);
+
+    const xpOf = async (uid) => (await as(uid, `SELECT xp FROM public.get_my_xp()`)).rows[0].xp;
+    const before = await xpOf(ARTHUR);
+    const approve = await as(GUINEVERE, `SELECT public.decide_quest_approval($1, true) AS campaign_id`, [id]);
+    assert.equal(approve.rows?.[0]?.campaign_id, GUILD_CAMPAIGN, approve.error);
+
+    const state = await reviewStateOf(id);
+    assert.equal(state.status, 'completed');
+    assert.ok(state.completed_at);
+    assert.equal(state.review_requested_at, null);
+    assert.equal(state.review_requested_by, null);
+    assert.ok((await xpOf(ARTHUR)) > before);
+
+    const again = await as(ARTHUR, `SELECT public.decide_quest_approval($1, true)`, [id]);
+    assert.match(again.error ?? '', /This quest is not awaiting approval/);
+  });
+});
+
+test('quest approval: sending back needs a reason and returns the quest to in-progress', async () => {
+  await scenario(async (as) => {
+    const id = await questIdOf(SEEDED_REQUEST);
+    for (const note of [null, '   ', '\n\t\n', 'x'.repeat(201)]) {
+      const bad = await as(ARTHUR, `SELECT public.decide_quest_approval($1, false, $2)`, [id, note]);
+      assert.match(bad.error ?? '', /Give a reason \(1-200 characters\) when sending a quest back/);
+    }
+
+    // From pending too: the send-back always lands in in-progress.
+    await db.exec('RESET ROLE');
+    // Two updates: the status change itself would clear a request set alongside it.
+    await db.query(`UPDATE public.quests SET status = 'pending' WHERE id = $1`, [id]);
+    await db.query(`UPDATE public.quests SET review_requested_at = NOW(), review_requested_by = $2 WHERE id = $1`, [id, MERLIN]);
+    const back = await as(ARTHUR, `SELECT public.decide_quest_approval($1, false, $2)`, [id, '  Add tests for the guard first  ']);
+    assert.ok(!back.error, back.error);
+    let state = await reviewStateOf(id);
+    assert.equal(state.status, 'in-progress');
+    assert.equal(state.return_note, 'Add tests for the guard first');
+    assert.equal(state.review_requested_at, null);
+    assert.equal(state.completed_at, null);
+
+    const again = await as(MERLIN, `SELECT public.request_quest_approval($1)`, [id]);
+    assert.ok(!again.error, again.error);
+    state = await reviewStateOf(id);
+    assert.ok(state.review_requested_at);
+    assert.equal(state.return_note, null, 'a new request clears the old reason');
+  });
+});
+
+test('quest approval: a release, a status change or leaving the guild ends the request', async () => {
+  await scenario(async (as) => {
+    const id = await questIdOf(SEEDED_REQUEST);
+    const reRequest = async () => {
+      const res = await as(MERLIN, `SELECT public.request_quest_approval($1)`, [id]);
+      assert.ok(!res.error, res.error);
+    };
+
+    const release = await as(MERLIN, `UPDATE public.quests SET assignee_id = NULL WHERE id = $1`, [id]);
+    assert.equal(release.count, 1, release.error);
+    assert.equal((await reviewStateOf(id)).review_requested_at, null);
+
+    await as(MERLIN, `UPDATE public.quests SET assignee_id = $2 WHERE id = $1`, [id, MERLIN]);
+    await reRequest();
+    const move = await as(MERLIN, `UPDATE public.quests SET status = 'pending' WHERE id = $1`, [id]);
+    assert.equal(move.count, 1, move.error);
+    assert.equal((await reviewStateOf(id)).review_requested_at, null);
+
+    await reRequest();
+    const edit = await as(ARTHUR, `UPDATE public.quests SET title = 'Audit RLS (renamed)' WHERE id = $1`, [id]);
+    assert.equal(edit.count, 1, edit.error);
+    assert.ok((await reviewStateOf(id)).review_requested_at, 'editing details keeps the request');
+
+    const leave = await as(MERLIN, `DELETE FROM public.guild_members WHERE user_id = $1 AND guild_id = $2`, [MERLIN, GUILD]);
+    assert.equal(leave.count, 1, leave.error);
+    const state = await reviewStateOf(id);
+    assert.equal(state.review_requested_at, null);
+    assert.equal(state.review_requested_by, null);
+  });
+});
+
+test('quest approval: anon can call neither RPC', async () => {
+  await scenario(async (as) => {
+    const id = await questIdOf(SEEDED_REQUEST);
+    const ask = await as(null, `SELECT public.request_quest_approval($1)`, [id]);
+    assert.match(ask.error ?? '', /permission denied/);
+    const decide = await as(null, `SELECT public.decide_quest_approval($1, true)`, [id]);
+    assert.match(decide.error ?? '', /permission denied/);
   });
 });

@@ -13,6 +13,14 @@ const FRIENDLY_PATTERNS = [
   /template is no longer shared/i,
   /add campaigns to this guild/i,
   /must be between \d+ and \d+ characters/i,
+  /must approve this quest/i,
+  /approval is only for guild campaigns/i,
+  /complete quests directly/i,
+  /already completed/i,
+  /assignee can request approval/i,
+  /awaiting approval/i,
+  /when sending a quest back/i,
+  /quest could not be found/i,
 ];
 
 /** Maps a PostgREST/Postgres error to something safe to show a user. */

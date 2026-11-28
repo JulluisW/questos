@@ -2,12 +2,13 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Award, Feather, GripVertical, Pencil, Trash2, UserMinus, UserPlus } from 'lucide-react';
+import { Award, Eye, Feather, GripVertical, Hourglass, Pencil, Trash2, Undo2, UserMinus, UserPlus } from 'lucide-react';
 import { PRIORITY_STYLES } from '@/lib/quests/constants';
 import { cn, formatDate } from '@/lib/utils';
 import type { BoardMember, Quest } from '@/types';
 
 export type QuestCardHandlers = {
+  onOpen?: (quest: Quest) => void;
   onEdit?: (quest: Quest) => void;
   onDelete?: (quest: Quest) => void;
   onClaim?: (quest: Quest, claim: boolean) => void;
@@ -39,6 +40,7 @@ export function QuestCardView({
   currentUserId,
   overlay,
   handle,
+  onOpen,
   onEdit,
   onDelete,
   onClaim,
@@ -46,6 +48,8 @@ export function QuestCardView({
   const completed = quest.status === 'completed';
   const priority = quest.priority ?? 'low';
   const isMine = quest.assignee_id === currentUserId;
+  const awaiting = Boolean(quest.review_requested_at) && !completed;
+  const sentBack = Boolean(quest.return_note) && !awaiting && !completed;
 
   return (
     <div
@@ -98,6 +102,19 @@ export function QuestCardView({
         <p className="line-clamp-2 pl-7 font-sans text-xs leading-relaxed text-stone-600">{quest.description}</p>
       )}
 
+      {awaiting && (
+        <p className="ml-7 inline-flex w-fit items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 font-sans text-[10px] font-semibold text-amber-800">
+          <Hourglass className="h-3 w-3" aria-hidden /> Awaiting approval
+        </p>
+      )}
+
+      {sentBack && (
+        <p className="ml-7 line-clamp-2 rounded border border-red-900/20 bg-red-50 px-2 py-1 font-sans text-[11px] text-red-900">
+          <Undo2 className="mr-1 inline h-3 w-3 align-[-2px]" aria-hidden />
+          <span className="font-semibold">Sent back:</span> {quest.return_note}
+        </p>
+      )}
+
       {/* Footer */}
       <div className="mt-1 flex items-center justify-between gap-2 border-t border-dashed border-[#e2d5c3] pt-2.5">
         <div className="flex min-w-0 items-center gap-1.5 font-sans text-[11px] text-stone-600">
@@ -114,6 +131,18 @@ export function QuestCardView({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
+          {!overlay && (
+            <button
+              type="button"
+              {...stopDrag}
+              onClick={() => onOpen?.(quest)}
+              aria-label={`Open quest details: ${quest.title}`}
+              title="Details"
+              className="rounded p-1 text-stone-500 hover:bg-[#ebdcca] hover:text-[#1c120c]"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          )}
           {handle}
           {completed && quest.completed_at && (
             <span className="font-serif text-[10px] text-stone-400 italic">{formatDate(quest.completed_at)}</span>

@@ -30,6 +30,7 @@ import type { BoardMember, Quest, QuestStatus } from '@/types';
 import { BoardColumn } from './board-column';
 import { DraggableQuestCard, QuestCardView } from './quest-card';
 import { QuestDialog } from './quest-dialog';
+import { QuestDetailDialog } from './quest-detail-dialog';
 import { OracleButton } from './oracle-dialog';
 import { BoardFilters, hasBoardFilters, questMatches, readBoardFilters, useBoardFilterNavigation } from './board-filters';
 
@@ -153,6 +154,9 @@ export function QuestBoard({
   const [editing, setEditing] = useState<Quest | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<Quest | null>(null);
+  // An id, not a copy: after a refresh the dialog shows the fresh quest.
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const viewing = viewingId ? (quests.find((q) => q.id === viewingId) ?? null) : null;
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const isMember = memberById.has(currentUserId);
@@ -211,6 +215,19 @@ export function QuestBoard({
       if (!dragged || !targetStatus) return;
 
       const statusChanged = dragged.status !== targetStatus;
+      // Workers reach Completed only through approval (item 25). The
+      // guard_quest_update trigger enforces this; here we just skip the
+      // round trip and say what to do instead.
+      if (!canManage && isGuild && statusChanged && (targetStatus === 'completed' || dragged.status === 'completed')) {
+        setBanner({
+          tone: 'info',
+          text:
+            dragged.status === 'completed'
+              ? 'Only a boss or manager can reopen a completed quest.'
+              : 'Open the quest details to request approval. A boss or manager completes it.',
+        });
+        return;
+      }
       // Workers never send a position: the guard trigger would reject it.
       const position =
         canManage && REORDERABLE.includes(targetStatus)
@@ -247,7 +264,7 @@ export function QuestBoard({
         setBanner({ tone: 'error', text: result.error });
       }
     },
-    [quests, columns, canManage]
+    [quests, columns, canManage, isGuild]
   );
 
   const handleClaim = useCallback(async (quest: Quest, claim: boolean) => {
@@ -260,6 +277,7 @@ export function QuestBoard({
     canManage,
     canClaim,
     currentUserId,
+    onOpen: (quest: Quest) => setViewingId(quest.id),
     onEdit: setEditing,
     onDelete: setDeleting,
     onClaim: handleClaim,
@@ -271,7 +289,9 @@ export function QuestBoard({
         <p className="text-xs text-stone-500">
           Drag cards between columns, or focus the grip and use Space + arrow keys.
           {canManage && ' Drag within a column to reorder.'}
-          {!canManage && isGuild && ' As a worker you can move and claim quests.'}
+          {!canManage &&
+            isGuild &&
+            ' As a worker you can move and claim quests; open a quest to request approval when it is done.'}
         </p>
         {canManage && (
           <div className="flex flex-wrap items-center gap-2">
@@ -368,6 +388,23 @@ export function QuestBoard({
           </DragOverlay>
         </Portal>
       </DndContext>
+
+      <QuestDetailDialog
+        quest={viewing}
+        assignee={viewing?.assignee_id ? memberById.get(viewing.assignee_id) : undefined}
+        currentUserId={currentUserId}
+        canManage={canManage}
+        isGuild={isGuild}
+        onClose={() => setViewingId(null)}
+        onEdit={(quest) => {
+          setViewingId(null);
+          setEditing(quest);
+        }}
+        onDone={(text) => {
+          setViewingId(null);
+          setBanner({ tone: 'success', text });
+        }}
+      />
 
       <QuestDialog
         open={creating || Boolean(editing)}

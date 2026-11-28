@@ -27,3 +27,4 @@ export const QUEST_DESCRIPTION_MAX = 200;
 export const CAMPAIGN_NAME_MAX = 60;
 export const CAMPAIGN_GOAL_MAX = 200;
 export const DIRECTIVE_MAX = 500;
+export const RETURN_NOTE_MAX = 200;

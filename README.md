@@ -14,6 +14,7 @@ QuestOS is a medieval-themed task manager built with Next.js 16, Supabase and th
 - **Command Center**: your level, active campaigns with progress, your open quests, recent completions, and a recent-activity feed (quests completed, campaigns forged, members joined, templates adopted) across your campaigns and guilds.
 - **XP and levels**: every completed quest earns XP for its campaign's creator (low 10, medium 20, high 30, +20 for a milestone). Postgres adds it up on read (`get_my_xp()`), so no client can write it. Level 2 starts at 100 XP and each level needs 100 more than the last.
 - **Guilds**: found a guild, share an invite link or invite an email address, and manage roles. Bosses and managers plan, workers move and claim quests.
+- **Quest approval**: in a guild campaign a worker cannot complete a quest alone. The worker who claimed it opens the quest's details and requests approval; a boss or manager approves it (it completes and earns XP) or sends it back to In Progress with a short reason. `/approvals` lists every open request in the guilds you boss or manage.
 - **Hall of Records**: every completed quest, chronicled, with title search and pagination.
 - **Search and filters**: search campaigns by name or goal and sort them; search and filter the quest board by priority, assignee and milestone. Every choice lives in the URL, so it survives a reload and can be shared.
 
@@ -26,7 +27,7 @@ All authorization lives in Postgres row-level security, so the UI is never trust
 | Solo campaign owner | everything on their own campaign |
 | Guild boss | everything in the guild, delete campaigns, change roles, remove members |
 | Guild manager | create/edit campaigns and quests, create invite links and email invites |
-| Guild worker | view guild campaigns, move quest status, claim/release quests |
+| Guild worker | view guild campaigns, move quests between Pending and In Progress, claim/release quests, request approval for their own quest |
 | Anyone else | nothing |
 
 Email invites send no email: the invitee sees them on the Team page after signing in with that confirmed address, and only the guild's boss and managers can see which emails were invited. Ownership columns (`created_by`, `guild_id`, `campaign_id`) are immutable through column-level grants, `completed_at` is derived by trigger, and AI usage is rate-limited per user through an append-only ledger. [`scripts/db-test.mjs`](scripts/db-test.mjs) tests these rules against an in-memory Postgres.
@@ -79,7 +80,7 @@ Every account uses the password `12345678`.
 | `lancelot@questos.dev` | worker | — | — |
 | `gawain@questos.dev` | worker | worker | — |
 
-Start with **Arthur**: his dashboard has active, completed and archived campaigns, a busy board (*Excalibur Auth Launch*), a pending invite link and weeks of history in the Hall of Records. Then open the same board as **Merlin** in a second browser profile: as a worker he can drag and claim quests but not edit them.
+Start with **Arthur**: his dashboard has active, completed and archived campaigns, a busy board (*Excalibur Auth Launch*), a pending invite link and weeks of history in the Hall of Records. Then open the same board as **Merlin** in a second browser profile: as a worker he can drag and claim quests but not edit or complete them. His *Audit row-level security policies* quest is already awaiting approval: approve it or send it back as Arthur on `/approvals`.
 
 Dates in the seed are relative to the moment it runs, so the dashboard always looks current. Running `psql "$DB_URL" -f supabase/seed.sql` again resets the demo accounts to this state.
 
@@ -101,7 +102,7 @@ CI (`.github/workflows/ci.yml`) runs lint, typecheck, `test:db` and build on eve
 src/
   actions/          Server Actions (auth, campaigns, quests, oracle, guilds)
   app/(auth)/       login, signup
-  app/(dashboard)/  dashboard, campaigns, board/[campaignId], team, join/[token], records
+  app/(dashboard)/  dashboard, campaigns, board/[campaignId], approvals, team, join/[token], records
   components/ui/    shared primitives (Button, ParchmentDialog, SubmitButton, Notice…)
   data/             server-only reads that return a Result (dashboard sections)
   lib/ai/           provider switch, Zod schemas, Oracle service

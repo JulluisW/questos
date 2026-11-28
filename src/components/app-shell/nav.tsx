@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Flag, Kanban, LayoutDashboard, ScrollText, Trophy, Users } from 'lucide-react';
+import { ClipboardCheck, Flag, Kanban, LayoutDashboard, ScrollText, Trophy, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const NAV_ITEMS = [
@@ -14,15 +14,29 @@ export const NAV_ITEMS = [
   { href: '/records', label: 'Hall of Records', icon: Trophy },
 ] as const;
 
+const APPROVALS_ITEM = { href: '/approvals', label: 'Approvals', icon: ClipboardCheck } as const;
+
+type NavProps = {
+  /** Shown to users who boss or manage a guild. Cosmetic: the page itself is safe for anyone. */
+  showApprovals?: boolean;
+};
+
+/** The Approvals item sits right after Quest Board. */
+function navItems(showApprovals: boolean | undefined) {
+  if (!showApprovals) return NAV_ITEMS;
+  const board = NAV_ITEMS.findIndex((item) => item.href === '/board');
+  return [...NAV_ITEMS.slice(0, board + 1), APPROVALS_ITEM, ...NAV_ITEMS.slice(board + 1)];
+}
+
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SidebarNav() {
+export function SidebarNav({ showApprovals }: NavProps) {
   const pathname = usePathname();
   return (
     <nav aria-label="Main" className="space-y-1.5 font-sans">
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+      {navItems(showApprovals).map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href);
         return (
           <Link
@@ -46,11 +60,11 @@ export function SidebarNav() {
 }
 
 /** Compact horizontal nav for small screens (the sidebar is hidden there). */
-export function MobileNav() {
+export function MobileNav({ showApprovals }: NavProps) {
   const pathname = usePathname();
   return (
     <nav aria-label="Main" className="flex gap-1 overflow-x-auto md:hidden">
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+      {navItems(showApprovals).map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href);
         return (
           <Link
@@ -77,6 +91,7 @@ const TITLES: Array<[string, string]> = [
   ['/campaigns', 'Campaigns'],
   ['/templates', 'Templates'],
   ['/board', 'Quest Board'],
+  ['/approvals', 'Approvals'],
   ['/team', 'Guild & Team'],
   ['/records', 'Hall of Records'],
   ['/join', 'Guild Invitation'],

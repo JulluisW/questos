@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { LogOut } from 'lucide-react';
 import { getProfile } from '@/data/auth';
+import { getManagedGuilds } from '@/data/guilds';
 import { displayName, getInitials } from '@/lib/utils';
 import { signOutAction } from '@/actions/auth';
 import { MobileNav, PageTitle, SidebarNav } from '@/components/app-shell/nav';
@@ -11,6 +12,9 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const profile = await getProfile();
+  // Only decides whether the Approvals nav item shows; a failed read hides it.
+  const managed = await getManagedGuilds(profile.id);
+  const showApprovals = managed.ok && managed.data.length > 0;
 
   const name = displayName(profile);
 
@@ -31,7 +35,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 </p>
               </div>
             </div>
-            <SidebarNav />
+            <SidebarNav showApprovals={showApprovals} />
           </div>
 
           <div className="flex items-center gap-3 border-t border-amber-900/30 px-2 pt-4">
@@ -72,7 +76,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 </button>
               </form>
             </div>
-            <MobileNav />
+            <MobileNav showApprovals={showApprovals} />
           </header>
 
           <div className="relative z-10 flex-1">{children}</div>

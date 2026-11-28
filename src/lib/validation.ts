@@ -5,6 +5,7 @@ import {
   DIRECTIVE_MAX,
   QUEST_DESCRIPTION_MAX,
   QUEST_TITLE_MAX,
+  RETURN_NOTE_MAX,
 } from '@/lib/quests/constants';
 import { PASSWORD_MIN } from '@/lib/auth-constants';
 
@@ -71,6 +72,13 @@ export const questStatusSchema = z.enum(['pending', 'in-progress', 'completed'])
 
 /** A board position; only its order relative to other quests matters. */
 export const questPositionSchema = z.number().finite().optional();
+
+/** The reason a boss or manager gives when sending a quest back. */
+export const returnNoteSchema = z
+  .string()
+  .trim()
+  .min(1, 'Give a reason for sending this quest back')
+  .max(RETURN_NOTE_MAX, `Keep the reason under ${RETURN_NOTE_MAX} characters`);
 
 export const directiveSchema = z.object({
   campaign_id: id,

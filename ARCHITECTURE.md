@@ -61,7 +61,8 @@ flowchart LR
 | Optimistic update | Card moves immediately; on action error it is reverted and an inline notice appears |
 | Server sync | "Store previous props" pattern: new `initialQuests` from `revalidatePath` replace local state |
 | Keyboard | The grip button is the drag activator; Arrow Left/Right jump between columns (custom `KeyboardCoordinateGetter`) |
-| Permissions | `can_manage_campaign` RPC → edit/delete/post controls; guild workers get Claim/Release |
+| Permissions | `can_manage_campaign` RPC → edit/delete/post controls; guild workers get Claim/Release and, in the quest detail dialog, Request approval |
+| Approval | Every card's Details button opens a read-only dialog. A worker's drop into or out of Completed on a guild board snaps back with a hint (the guard trigger rejects it anyway) |
 
 ### AI Oracle
 
@@ -113,7 +114,9 @@ Templates: only a campaign's creator can share it (`set_campaign_shared`), and f
 
 Activity feed: derived on read, with no table of its own. `get_activity_feed()` is `SECURITY INVOKER`, so RLS decides every row: quest completions, campaigns created, campaigns started from a template, and member joins, each visible only to people who can already see that campaign or guild. The single exception is `get_my_template_adoptions()` (`SECURITY DEFINER`): a template's creator learns that someone adopted it, with only the adopter's username and the time, never the adopted campaign, and only while the creator can still see the template itself. Adoptions the creator can already see are skipped, so nothing appears twice.
 
-Triggers: `guard_quest_update` (workers may only change status or claim/release; reordering via `position` is boss, manager or solo owner only), `validate_quest_assignee` (the assignee must belong to the campaign's audience), `release_quests_on_member_leave`, `sync_quest_completed_at`, `touch_updated_at`.
+Quest approval: in a guild campaign only a boss or manager moves a quest into or out of `completed` (`guard_quest_update`). The worker who claimed a quest calls `request_quest_approval(id)`, which sets `review_requested_at` and `review_requested_by`. A boss or manager calls `decide_quest_approval(id, approve, note)`: approve sets `completed` (so `completed_at` and XP follow), send back sets `in-progress` and stores `return_note` (required, 1-200 characters). Both RPCs are `SECURITY DEFINER`, recheck the caller's role and decide with a conditional `UPDATE`, so a second simultaneous decision fails cleanly. Clients have no UPDATE grant on the three review columns. `clear_quest_review` ends an open request whenever the status or assignee changes, which also covers a release and a member leaving; completion clears the reason.
+
+Triggers: `guard_quest_update` (workers may only move quests between pending and in-progress or claim/release; reordering via `position` is boss, manager or solo owner only), `clear_quest_review`, `validate_quest_assignee` (the assignee must belong to the campaign's audience), `release_quests_on_member_leave`, `sync_quest_completed_at`, `touch_updated_at`.
 
 ### XP and levels
 
@@ -138,7 +141,7 @@ Shown on the Command Center (level card) and in the desktop sidebar, both stream
 src/
   actions/          auth, campaigns, quests, oracle, guilds (Server Actions)
   app/(auth)/       login, signup
-  app/(dashboard)/  layout (sidebar), dashboard, campaigns, board, team, join/[token], records
+  app/(dashboard)/  layout (sidebar), dashboard, campaigns, board, approvals, team, join/[token], records
   components/ui/    Button, ParchmentDialog, SubmitButton, ConfirmDialog, Notice, FormField…
   components/       app-shell nav, campaign card + forge dialog
   data/             server-only reads returning Result: auth, campaigns, quests, guilds
@@ -166,7 +169,7 @@ scripts/            db-test.mjs
 
 ## Roadmap
 
-- An approver page for guild quest completions; boss-set XP per quest
+- Boss-set XP per quest
 - Email invites, OAuth sign-in, password reset
 - Persisted quest ordering within a column; filter, sort and search
 - pgTAP or the PGlite suite in CI
@@ -182,3 +185,4 @@ scripts/            db-test.mjs
 | 2026-11-26 | Application code moved under `src/` (app, actions, components, data, lib, types, proxy.ts); config, `supabase/`, `scripts/` and `public/` stay at the root. Added the `data/` read layer to the project layout. |
 | 2026-11-27 | Production AI provider decided: OpenAI, already wired into the provider switch, with `gpt-6-luna` as the default model (OpenAI's replacement for `gpt-4o-mini`, which shuts down on Jan 14, 2027). Removed from the roadmap. |
 | 2026-11-27 | XP and levels derived in Postgres (`get_my_xp()`): campaign creator earns XP for completed quests, growing level steps. Removed from the roadmap. |
+| 2026-11-28 | Quest approval: guild workers request approval, bosses and managers approve or send back with a reason (`request_quest_approval`, `decide_quest_approval`, `clear_quest_review`); `/approvals` page. Approver page removed from the roadmap. |
