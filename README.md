@@ -11,7 +11,7 @@ QuestOS is a medieval-themed task manager built with Next.js 16, Supabase and th
 - **Templates**: a campaign's creator can share it as a template. Every signed-in user can browse templates on `/templates`, see how often each was adopted and finished, and start their own copy, solo or for a guild they manage.
 - **AI Oracle**: "Forge with Oracle" (or "Ask the Oracle" on any board) turns a directive into 3–8 structured quests using a Zod schema. It runs on local Ollama by default and switches to OpenAI with one env var.
 - **Quest board**: drag-and-drop Kanban (pointer or keyboard) with optimistic updates and rollback; bosses, managers and solo owners reorder cards within Pending and In Progress, and the order survives a reload; create, edit, delete and assign quests; milestones and priorities.
-- **Command Center**: your level, active campaigns with progress, your open quests, and recent completions.
+- **Command Center**: your level, active campaigns with progress, your open quests, recent completions, and a recent-activity feed (quests completed, campaigns forged, members joined, templates adopted) across your campaigns and guilds.
 - **XP and levels**: every completed quest earns XP for its campaign's creator (low 10, medium 20, high 30, +20 for a milestone). Postgres adds it up on read (`get_my_xp()`), so no client can write it. Level 2 starts at 100 XP and each level needs 100 more than the last.
 - **Guilds**: found a guild, share an invite link or invite an email address, and manage roles. Bosses and managers plan, workers move and claim quests.
 - **Hall of Records**: every completed quest, chronicled, with title search and pagination.

@@ -1053,3 +1053,102 @@ test('templates: a creator who leaves, is removed or demoted takes the template 
     assert.match(direct.error ?? '', /permission denied/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Activity feed (derived; RLS decides, plus the template-creator exception)
+// ---------------------------------------------------------------------------
+test('activity feed: members see their guild and solo events, nothing else', async () => {
+  await scenario(async (as) => {
+    const feed = await as(MERLIN, `SELECT kind, campaign_id, guild_name FROM public.get_activity_feed(50)`);
+    assert.ok(feed.rows?.length > 0, feed.error);
+    const campaigns = new Set(feed.rows.map((r) => r.campaign_id).filter(Boolean));
+    assert.ok(campaigns.has(GUILD_CAMPAIGN), 'Round Table campaign events');
+    assert.ok(
+      feed.rows.some((r) => r.kind === 'quest_completed' && r.campaign_id === GUILD_CAMPAIGN),
+      'a Round Table quest completion specifically'
+    );
+    assert.ok(campaigns.has(MERLIN_SOLO), 'own solo campaign events');
+    assert.ok(!campaigns.has(ARTHUR_SOLO), 'no events from Arthur solo');
+    assert.ok(!campaigns.has(AVALON_CAMPAIGN), 'no events from Avalon');
+    assert.ok(feed.rows.some((r) => r.kind === 'member_joined'));
+    await db.exec('RESET ROLE');
+    const avalon = await db.query(`SELECT name FROM public.guilds WHERE id = $1`, [AVALON]);
+    assert.ok(!feed.rows.some((r) => r.guild_name === avalon.rows[0].name), 'no Avalon member events');
+
+    const outsider = await as(OUTSIDER, `SELECT kind FROM public.get_activity_feed(50)`);
+    assert.equal(outsider.rows.length, 0, outsider.error);
+  });
+});
+
+test('activity feed: template adoptions reach the adopter audience and, by name only, the creator', async () => {
+  await scenario(async (as) => {
+    await as(ARTHUR, `SELECT public.set_campaign_shared($1, true)`, [ARTHUR_SOLO]);
+    const solo = await as(MERLIN, `SELECT public.adopt_template($1, NULL) AS id`, [ARTHUR_SOLO]);
+    const copyId = solo.rows?.[0]?.id;
+    assert.ok(copyId, solo.error);
+
+    const merlinFeed = await as(MERLIN, `SELECT kind, campaign_id FROM public.get_activity_feed(50)`);
+    assert.ok(merlinFeed.rows.some((r) => r.kind === 'template_adopted' && r.campaign_id === copyId));
+
+    const arthurFeed = await as(ARTHUR, `SELECT campaign_id FROM public.get_activity_feed(50)`);
+    assert.ok(!arthurFeed.rows.some((r) => r.campaign_id === copyId), 'creator never sees the private copy');
+    await db.exec('RESET ROLE');
+    const tName = (await db.query(`SELECT name FROM public.campaigns WHERE id = $1`, [ARTHUR_SOLO])).rows[0].name;
+    const mine = await as(ARTHUR, `SELECT * FROM public.get_my_template_adoptions(50)`);
+    assert.deepEqual(mine.rows.map(({ template_id, template_name, adopter_username }) => ({ template_id, template_name, adopter_username })), [
+      { template_id: ARTHUR_SOLO, template_name: tName, adopter_username: 'merlin' },
+    ], mine.error);
+    assert.deepEqual(Object.keys(mine.rows[0]).sort(), ['adopter_username', 'occurred_at', 'template_id', 'template_name']);
+
+    // A Round Table adoption is visible to Arthur in the main feed, so it is not repeated.
+    const guild = await as(GUINEVERE, `SELECT public.adopt_template($1, $2) AS id`, [ARTHUR_SOLO, GUILD]);
+    assert.ok(guild.rows?.[0]?.id, guild.error);
+    const arthurAgain = await as(ARTHUR, `SELECT kind, campaign_id FROM public.get_activity_feed(50)`);
+    assert.ok(arthurAgain.rows.some((r) => r.kind === 'template_adopted' && r.campaign_id === guild.rows[0].id));
+    const mineAgain = await as(ARTHUR, `SELECT adopter_username FROM public.get_my_template_adoptions(50)`);
+    assert.deepEqual(mineAgain.rows.map((r) => r.adopter_username), ['merlin']);
+  });
+});
+
+test('activity feed: anon is refused and the limit is clamped to 50', async () => {
+  await scenario(async (as) => {
+    for (const fn of ['get_activity_feed', 'get_my_template_adoptions']) {
+      const anon = await as(null, `SELECT * FROM public.${fn}(5)`);
+      assert.match(anon.error ?? '', /permission denied/, fn);
+    }
+    // Make sure Arthur has more than 50 events, so the cap is really exercised.
+    await db.exec('RESET ROLE');
+    await db.query(
+      `INSERT INTO public.quests (campaign_id, title, status)
+       SELECT $1, 'Clamp filler ' || n, 'completed' FROM generate_series(1, 60) AS n`,
+      [ARTHUR_SOLO]
+    );
+    const big = await as(ARTHUR, `SELECT kind FROM public.get_activity_feed(1000)`);
+    assert.equal(big.rows.length, 50, big.error);
+    const one = await as(ARTHUR, `SELECT kind FROM public.get_activity_feed(0)`);
+    assert.equal(one.rows.length, 1, one.error);
+  });
+});
+
+test('activity feed: a template creator who left the guild learns nothing more about it', async () => {
+  await scenario(async (as) => {
+    const forged = await as(
+      GUINEVERE,
+      `SELECT public.forge_campaign_with_quests('Gwen feed plan', NULL, $1, '[]'::jsonb) AS id`,
+      [GUILD]
+    );
+    const plan = forged.rows?.[0]?.id;
+    assert.ok(plan, forged.error);
+    await as(GUINEVERE, `SELECT public.set_campaign_shared($1, true)`, [plan]);
+    const solo = await as(MERLIN, `SELECT public.adopt_template($1, NULL) AS id`, [plan]);
+    assert.ok(solo.rows?.[0]?.id, solo.error);
+    const before = await as(GUINEVERE, `SELECT adopter_username FROM public.get_my_template_adoptions(50)`);
+    assert.deepEqual(before.rows.map((r) => r.adopter_username), ['merlin'], before.error);
+
+    const remove = await as(ARTHUR, `DELETE FROM public.guild_members WHERE guild_id = $1 AND user_id = $2`, [GUILD, GUINEVERE]);
+    assert.equal(remove.count, 1, remove.error);
+    await as(ARTHUR, `UPDATE public.campaigns SET name = 'Renamed after Gwen left' WHERE id = $1`, [plan]);
+    const after = await as(GUINEVERE, `SELECT * FROM public.get_my_template_adoptions(50)`);
+    assert.equal(after.rows.length, 0, after.error);
+  });
+});

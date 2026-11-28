@@ -73,6 +73,14 @@ export type CampaignTemplate = Omit<
   'top_quests'
 > & { top_quests: string[] };
 
+/** One row of the Command Center's "Recent activity" feed. */
+export type ActivityItem =
+  | { kind: 'quest_completed'; key: string; at: string; campaignId: string; campaignName: string; questTitle: string }
+  | { kind: 'campaign_created'; key: string; at: string; campaignId: string; campaignName: string; actor: string | null }
+  | { kind: 'template_adopted'; key: string; at: string; campaignId: string; campaignName: string; actor: string | null }
+  | { kind: 'member_joined'; key: string; at: string; guildName: string; actor: string | null }
+  | { kind: 'my_template_adopted'; key: string; at: string; templateId: string; templateName: string; actor: string | null };
+
 /** The signed-in user's XP, derived in Postgres by `get_my_xp()`. */
 export type MyXp = {
   xp: number;

@@ -4,6 +4,7 @@ import { StatsCards } from './_components/stats-cards';
 import { ActiveCampaigns } from './_components/active-campaigns';
 import { OpenQuests } from './_components/open-quests';
 import { RecentlyCompleted } from './_components/recently-completed';
+import { ActivityFeed } from './_components/activity-feed';
 
 export const metadata = { title: 'Command Center' };
 
@@ -25,6 +26,8 @@ export default function DashboardPage() {
         <OpenQuests />
         <RecentlyCompleted />
       </div>
+
+      <ActivityFeed />
     </div>
   );
 }

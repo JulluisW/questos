@@ -353,6 +353,19 @@ export type Database = {
         };
         Returns: string;
       };
+      get_activity_feed: {
+        Args: { p_limit?: number };
+        Returns: {
+          actor: string | null;
+          campaign_id: string | null;
+          campaign_name: string | null;
+          detail: string | null;
+          guild_name: string | null;
+          kind: string;
+          occurred_at: string;
+          ref_id: string;
+        }[];
+      };
       get_my_email_invites: {
         Args: Record<PropertyKey, never>;
         Returns: {
@@ -369,6 +382,15 @@ export type Database = {
       get_my_guild_role: {
         Args: { p_guild_id: string };
         Returns: Database['public']['Enums']['guild_role'];
+      };
+      get_my_template_adoptions: {
+        Args: { p_limit?: number };
+        Returns: {
+          adopter_username: string | null;
+          occurred_at: string;
+          template_id: string;
+          template_name: string;
+        }[];
       };
       get_my_xp: {
         Args: Record<PropertyKey, never>;
