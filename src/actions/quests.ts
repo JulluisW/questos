@@ -3,7 +3,14 @@
 import { revalidatePath } from 'next/cache';
 import { createClient, getUserId } from '@/lib/supabase/server';
 import { dbErrorMessage } from '@/lib/db-errors';
-import { fieldErrors, formToObject, idSchema, questFormSchema, questStatusSchema } from '@/lib/validation';
+import {
+  fieldErrors,
+  formToObject,
+  idSchema,
+  questFormSchema,
+  questPositionSchema,
+  questStatusSchema,
+} from '@/lib/validation';
 import type { ActionState, QuestStatus } from '@/types';
 
 const NO_PERMISSION = 'Only the guild boss or a manager can change quests here.';
@@ -57,17 +64,23 @@ export async function deleteQuestAction(questId: string): Promise<ActionState> {
   return { ok: true };
 }
 
-export async function updateQuestStatusAction(questId: string, newStatus: QuestStatus): Promise<ActionState> {
+/** Moves a quest to a column and, for managers reordering, to a position within it. */
+export async function updateQuestStatusAction(
+  questId: string,
+  newStatus: QuestStatus,
+  position?: number
+): Promise<ActionState> {
   const id = idSchema.safeParse(questId);
   const status = questStatusSchema.safeParse(newStatus);
-  if (!id.success || !status.success) return { ok: false, error: 'Invalid request.' };
+  const pos = questPositionSchema.safeParse(position);
+  if (!id.success || !status.success || !pos.success) return { ok: false, error: 'Invalid request.' };
 
   const supabase = await createClient();
   if (!(await getUserId(supabase))) return { ok: false, error: 'Please sign in again.' };
 
   const { data, error } = await supabase
     .from('quests')
-    .update({ status: status.data })
+    .update(pos.data === undefined ? { status: status.data } : { status: status.data, position: pos.data })
     .eq('id', id.data)
     .select('campaign_id');
 

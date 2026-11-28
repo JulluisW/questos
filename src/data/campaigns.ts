@@ -61,6 +61,7 @@ export const getCampaignBoard = cache(async (id: string): Promise<Result<Campaig
     .from('campaigns')
     .select('*, guilds(id, name), quests(*)')
     .eq('id', id)
+    .order('position', { referencedTable: 'quests', ascending: true })
     .order('created_at', { referencedTable: 'quests', ascending: true })
     .maybeSingle();
 

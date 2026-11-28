@@ -12,10 +12,15 @@ import {
   type DragStartEvent,
   type KeyboardCoordinateGetter,
 } from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  type SortingStrategy,
+} from '@dnd-kit/sortable';
 import { Award, Hammer, Plus, ShieldCheck } from 'lucide-react';
 import { claimQuestAction, deleteQuestAction, updateQuestStatusAction } from '@/actions/quests';
 import { COLUMN_IDS, COLUMN_LABELS } from '@/lib/quests/constants';
-import { resolveTargetStatus } from '@/lib/quests/drag';
+import { positionForDrop, resolveTargetStatus } from '@/lib/quests/drag';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Notice } from '@/components/ui/notice';
@@ -44,9 +49,50 @@ const COLUMN_STYLES: Record<QuestStatus, { color: string; icon: React.ReactNode;
   },
 };
 
-/** Arrow Left/Right jumps the dragged card to the neighbouring column. */
-const columnKeyboardCoordinates: KeyboardCoordinateGetter = (event, { context, currentCoordinates }) => {
+/** Columns where the viewer cannot reorder: cards stay put while dragging. */
+const noShift: SortingStrategy = () => null;
+
+/** Completed keeps "most recently finished first"; only these columns reorder. */
+const REORDERABLE: QuestStatus[] = ['pending', 'in-progress'];
+
+/**
+ * Arrow Up/Down moves the dragged card past its neighbour in the column it is
+ * over, and stays put at the top or bottom. dnd-kit's own
+ * sortableKeyboardCoordinates would pick the nearest target anywhere, which
+ * can be a card in another column and would change the quest's status.
+ */
+const verticalKeyboardCoordinates: KeyboardCoordinateGetter = (event, { context, currentCoordinates }) => {
+  event.preventDefault();
+  const { collisionRect, droppableRects } = context;
+  if (!collisionRect) return undefined;
+
+  const centerX = collisionRect.left + collisionRect.width / 2;
+  const centerY = collisionRect.top + collisionRect.height / 2;
+  const column = COLUMN_IDS.map((id) => droppableRects.get(id)).find(
+    (rect) => rect && centerX >= rect.left && centerX <= rect.right
+  );
+  if (!column) return currentCoordinates;
+
+  let nearest: { top: number; distance: number } | null = null;
+  for (const [id, rect] of droppableRects) {
+    // The dragged card's own starting slot stays a target, so Up/Down can bring it back.
+    if (COLUMN_IDS.includes(id as QuestStatus)) continue;
+    const rectX = rect.left + rect.width / 2;
+    if (rectX < column.left || rectX > column.right) continue;
+    const rectY = rect.top + rect.height / 2;
+    const distance = event.code === 'ArrowDown' ? rectY - centerY : centerY - rectY;
+    if (distance > 1 && (!nearest || distance < nearest.distance)) nearest = { top: rect.top, distance };
+  }
+  if (!nearest) return currentCoordinates;
+
+  return { x: currentCoordinates.x, y: currentCoordinates.y + (nearest.top - collisionRect.top) };
+};
+
+/** Arrow Left/Right jumps the dragged card to the neighbouring column; Up/Down moves within it. */
+const boardKeyboardCoordinates: KeyboardCoordinateGetter = (event, args) => {
+  if (event.code === 'ArrowUp' || event.code === 'ArrowDown') return verticalKeyboardCoordinates(event, args);
   if (event.code !== 'ArrowRight' && event.code !== 'ArrowLeft') return undefined;
+  const { context, currentCoordinates } = args;
   event.preventDefault();
 
   const { collisionRect, droppableRects } = context;
@@ -113,6 +159,10 @@ export function QuestBoard({
   const columns = useMemo(() => {
     const grouped: Record<QuestStatus, Quest[]> = { pending: [], 'in-progress': [], completed: [] };
     for (const q of quests) grouped[q.status ?? 'pending'].push(q);
+    const byPosition = (a: Quest, b: Quest) =>
+      a.position - b.position || (a.created_at ?? '').localeCompare(b.created_at ?? '');
+    grouped.pending.sort(byPosition);
+    grouped['in-progress'].sort(byPosition);
     // Most recently finished first in Completed.
     grouped.completed.sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''));
     return grouped;
@@ -122,7 +172,7 @@ export function QuestBoard({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: columnKeyboardCoordinates })
+    useSensor(KeyboardSensor, { coordinateGetter: boardKeyboardCoordinates })
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -136,32 +186,49 @@ export function QuestBoard({
       if (!over) return;
 
       const draggedId = String(active.id);
-      const targetStatus = resolveTargetStatus(quests, String(over.id));
+      const overId = String(over.id);
+      const targetStatus = resolveTargetStatus(quests, overId);
       const dragged = quests.find((q) => q.id === draggedId);
-      if (!dragged || !targetStatus || dragged.status === targetStatus) return;
+      if (!dragged || !targetStatus) return;
 
-      const previous = dragged.status;
+      const statusChanged = dragged.status !== targetStatus;
+      // Workers never send a position: the guard trigger would reject it.
+      const position =
+        canManage && REORDERABLE.includes(targetStatus)
+          ? positionForDrop(columns[targetStatus], draggedId, overId)
+          : null;
+      if (!statusChanged && position === null) return;
+
       setQuests((prev) =>
         prev.map((q) =>
           q.id === draggedId
             ? {
                 ...q,
                 status: targetStatus,
-                completed_at: targetStatus === 'completed' ? new Date().toISOString() : null,
+                completed_at: statusChanged
+                  ? targetStatus === 'completed'
+                    ? new Date().toISOString()
+                    : null
+                  : q.completed_at,
+                position: position ?? q.position,
               }
             : q
         )
       );
 
-      const result = await updateQuestStatusAction(draggedId, targetStatus);
+      const result = await updateQuestStatusAction(draggedId, targetStatus, position ?? undefined);
       if (result && !result.ok) {
         setQuests((prev) =>
-          prev.map((q) => (q.id === draggedId ? { ...q, status: previous, completed_at: dragged.completed_at } : q))
+          prev.map((q) =>
+            q.id === draggedId
+              ? { ...q, status: dragged.status, completed_at: dragged.completed_at, position: dragged.position }
+              : q
+          )
         );
         setBanner({ tone: 'error', text: result.error });
       }
     },
-    [quests]
+    [quests, columns, canManage]
   );
 
   const handleClaim = useCallback(async (quest: Quest, claim: boolean) => {
@@ -184,6 +251,7 @@ export function QuestBoard({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-stone-500">
           Drag cards between columns, or focus the grip and use Space + arrow keys.
+          {canManage && ' Drag within a column to reorder.'}
           {!canManage && isGuild && ' As a worker you can move and claim quests.'}
         </p>
         {canManage && (
@@ -229,14 +297,19 @@ export function QuestBoard({
                   bannerIcon={style.icon}
                   emptyText={style.empty}
                 >
-                  {list.map((quest) => (
-                    <DraggableQuestCard
-                      key={quest.id}
-                      quest={quest}
-                      assignee={quest.assignee_id ? memberById.get(quest.assignee_id) : undefined}
-                      {...cardProps}
-                    />
-                  ))}
+                  <SortableContext
+                    items={list.map((q) => q.id)}
+                    strategy={canManage && REORDERABLE.includes(status) ? verticalListSortingStrategy : noShift}
+                  >
+                    {list.map((quest) => (
+                      <DraggableQuestCard
+                        key={quest.id}
+                        quest={quest}
+                        assignee={quest.assignee_id ? memberById.get(quest.assignee_id) : undefined}
+                        {...cardProps}
+                      />
+                    ))}
+                  </SortableContext>
                 </BoardColumn>
               );
             })}

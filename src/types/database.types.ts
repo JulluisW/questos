@@ -254,6 +254,7 @@ export type Database = {
           description: string | null;
           id: string;
           is_milestone: boolean | null;
+          position: number;
           priority: Database['public']['Enums']['quest_priorities'] | null;
           status: Database['public']['Enums']['quest_status'] | null;
           title: string;
@@ -267,6 +268,7 @@ export type Database = {
           description?: string | null;
           id?: string;
           is_milestone?: boolean | null;
+          position?: number;
           priority?: Database['public']['Enums']['quest_priorities'] | null;
           status?: Database['public']['Enums']['quest_status'] | null;
           title: string;
@@ -276,6 +278,7 @@ export type Database = {
           assignee_id?: string | null;
           description?: string | null;
           is_milestone?: boolean | null;
+          position?: number;
           priority?: Database['public']['Enums']['quest_priorities'] | null;
           status?: Database['public']['Enums']['quest_status'] | null;
           title?: string;

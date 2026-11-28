@@ -1,6 +1,7 @@
 'use client';
 
-import { useDraggable } from '@dnd-kit/core';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Award, Feather, GripVertical, Pencil, Trash2, UserMinus, UserPlus } from 'lucide-react';
 import { PRIORITY_STYLES } from '@/lib/quests/constants';
 import { cn, formatDate } from '@/lib/utils';
@@ -164,7 +165,9 @@ export function QuestCardView({
  * role="button" element.
  */
 export function DraggableQuestCard(props: Omit<QuestCardViewProps, 'overlay' | 'handle'>) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id: props.quest.id });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging, transform, transition } = useSortable({
+    id: props.quest.id,
+  });
   // dnd-kit types listeners as Record<string, Function>; narrow the keyboard one.
   const { onKeyDown, ...pointerListeners } = listeners ?? {};
   const handleKeyDown = onKeyDown as React.KeyboardEventHandler<HTMLButtonElement> | undefined;
@@ -172,6 +175,8 @@ export function DraggableQuestCard(props: Omit<QuestCardViewProps, 'overlay' | '
   return (
     <li
       ref={setNodeRef}
+      // dnd-kit moves sortable items with a transform; it can only be inline.
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       {...pointerListeners}
       className={cn('cursor-grab touch-manipulation rounded-lg active:cursor-grabbing', isDragging && 'opacity-40')}
     >

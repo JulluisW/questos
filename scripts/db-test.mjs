@@ -766,3 +766,99 @@ test('email invites: an existing member sees nothing and accepting keeps their r
     assert.ok(row.rows[0].accepted_at);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Persisted quest ordering (quests.position)
+// ---------------------------------------------------------------------------
+test('quest position: always set, unique per campaign, new quests go last', async () => {
+  const { rows } = await db.query(`
+    SELECT COUNT(*) FILTER (WHERE position IS NULL)::int AS missing,
+           (SELECT COUNT(*) FROM (
+              SELECT campaign_id, position FROM public.quests GROUP BY 1, 2 HAVING COUNT(*) > 1
+            ) d)::int AS dupes
+    FROM public.quests`);
+  assert.deepEqual(rows[0], { missing: 0, dupes: 0 });
+
+  await scenario(async (as) => {
+    const added = await as(
+      GUINEVERE,
+      `INSERT INTO public.quests (campaign_id, title) VALUES ($1, 'Order test') RETURNING position`,
+      [GUILD_CAMPAIGN]
+    );
+    assert.equal(added.count, 1, added.error);
+    await db.exec('RESET ROLE');
+    const max = await db.query(
+      `SELECT MAX(position) AS p FROM public.quests WHERE campaign_id = $1 AND title <> 'Order test'`,
+      [GUILD_CAMPAIGN]
+    );
+    assert.ok(added.rows[0].position > max.rows[0].p);
+  });
+});
+
+test('quest position: forged quests keep their array order', async () => {
+  await scenario(async (as) => {
+    const forged = await as(
+      ARTHUR,
+      `SELECT public.forge_campaign_with_quests('Order forge', NULL, NULL, $1::jsonb) AS id`,
+      [JSON.stringify([{ title: 'First' }, { title: 'Second' }, { title: 'Third' }])]
+    );
+    assert.ok(!forged.error, forged.error);
+    await db.exec('RESET ROLE');
+    const { rows } = await db.query(`SELECT title FROM public.quests WHERE campaign_id = $1 ORDER BY position`, [
+      forged.rows[0].id,
+    ]);
+    assert.deepEqual(
+      rows.map((r) => r.title),
+      ['First', 'Second', 'Third']
+    );
+  });
+});
+
+test('quest position: managers reorder, workers and outsiders cannot', async () => {
+  await scenario(async (as) => {
+    const target = `campaign_id = $1 AND title = 'Write invite link flow'`;
+    const boss = await as(ARTHUR, `UPDATE public.quests SET position = 1.5 WHERE ${target}`, [GUILD_CAMPAIGN]);
+    assert.equal(boss.count, 1, boss.error);
+
+    const worker = await as(MERLIN, `UPDATE public.quests SET position = 2.5 WHERE ${target}`, [GUILD_CAMPAIGN]);
+    assert.match(worker.error ?? '', /boss or a manager/);
+
+    const move = await as(MERLIN, `UPDATE public.quests SET status = 'in-progress' WHERE ${target} RETURNING position`, [
+      GUILD_CAMPAIGN,
+    ]);
+    assert.equal(move.count, 1, move.error);
+    assert.equal(move.rows[0].position, 1.5);
+
+    const outsider = await as(OUTSIDER, `UPDATE public.quests SET position = 3.5 WHERE ${target}`, [GUILD_CAMPAIGN]);
+    assert.equal(outsider.count ?? 0, 0);
+  });
+});
+
+test('quest position: a new quest still goes last after cards were dropped at the bottom', async () => {
+  await scenario(async (as) => {
+    const forged = await as(
+      ARTHUR,
+      `SELECT public.forge_campaign_with_quests('Reorder forge', NULL, NULL, $1::jsonb) AS id`,
+      [JSON.stringify([{ title: 'Alpha' }, { title: 'Bravo' }, { title: 'Charlie' }])]
+    );
+    const campaign = forged.rows[0].id;
+    // Twice: move the top card to the bottom, the way positionForDrop does (last + 1024).
+    for (let i = 0; i < 2; i++) {
+      const moved = await as(
+        ARTHUR,
+        `UPDATE public.quests SET position = (SELECT MAX(position) FROM public.quests WHERE campaign_id = $1) + 1024
+         WHERE id = (SELECT id FROM public.quests WHERE campaign_id = $1 ORDER BY position LIMIT 1)`,
+        [campaign]
+      );
+      assert.equal(moved.count, 1, moved.error);
+    }
+    const added = await as(ARTHUR, `INSERT INTO public.quests (campaign_id, title) VALUES ($1, 'Newest')`, [campaign]);
+    assert.equal(added.count, 1, added.error);
+    await db.exec('RESET ROLE');
+    const { rows } = await db.query(`SELECT title FROM public.quests WHERE campaign_id = $1 ORDER BY position`, [campaign]);
+    assert.deepEqual(
+      rows.map((r) => r.title),
+      ['Charlie', 'Alpha', 'Bravo', 'Newest']
+    );
+  });
+});

@@ -64,6 +64,9 @@ export const questFormSchema = z.object({
 
 export const questStatusSchema = z.enum(['pending', 'in-progress', 'completed']);
 
+/** A board position; only its order relative to other quests matters. */
+export const questPositionSchema = z.number().finite().optional();
+
 export const directiveSchema = z.object({
   campaign_id: id,
   directive: z
